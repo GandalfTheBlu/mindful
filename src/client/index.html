@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mindful</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <span class="app-name">mindful</span>
+      <button id="btn-new">+</button>
+    </div>
+    <ul id="session-list"></ul>
+    <div id="sidebar-footer">
+      <button id="btn-wipe-memory">Wipe memory</button>
+    </div>
+  </aside>
+
+  <main id="chat-area">
+    <header id="chat-header">
+      <h1 id="chat-title" contenteditable="false" spellcheck="false">Select or start a conversation</h1>
+      <div id="header-actions">
+        <button id="btn-save" disabled>Save</button>
+      </div>
+    </header>
+
+    <div id="messages"></div>
+
+    <form id="input-form">
+      <textarea id="input" placeholder="Message…" rows="1" disabled></textarea>
+      <button id="btn-send" type="submit" disabled>Send</button>
+    </form>
+  </main>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>

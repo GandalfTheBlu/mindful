@@ -1,0 +1,13 @@
+{
+  "name": "mindful",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server/chatServer.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "vectra": "^0.9.0",
+    "uuid": "^9.0.1"
+  }
+}

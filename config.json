@@ -1,4 +1,5 @@
 {
+  "dataDir": "C:\\mind",
   "llm": {
     "serverHost": "192.168.0.208",
     "port": 8080,
@@ -12,5 +13,14 @@
     "binary": "C:\\llama_cpp\\bin\\llama-server.exe",
     "model": "C:\\llama_cpp\\models\\nomic-embed-text-v1.5.Q8_0.gguf",
     "contextSize": 512
+  },
+  "memory": {
+    "retrievalWindowChars": 1000,
+    "maxInjectedMemories": 3,
+    "maxTokens": 256
+  },
+  "contextHorizon": {
+    "charsPerToken": 4,
+    "summarizeAtPercent": 0.65
   }
 }
