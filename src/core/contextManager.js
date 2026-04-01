@@ -49,8 +49,10 @@ export async function processMessage(session, userContent) {
     ])
   );
 
-  const memories = (await retrieveMemories(recentText + '\n' + userContent))
-    .filter(m => !alreadyInContext.has(m));
+  const retrievalQuery = recentText + '\n' + userContent;
+  const memories = retrievalQuery.trim().length < 20
+    ? []
+    : (await retrieveMemories(retrievalQuery)).filter(m => !alreadyInContext.has(m));
 
   log('memory:injecting', memories.length > 0 ? memories : '(none — all filtered or empty)');
 

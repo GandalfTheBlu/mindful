@@ -17,7 +17,8 @@
   "memory": {
     "retrievalWindowChars": 1000,
     "maxInjectedMemories": 3,
-    "maxTokens": 256
+    "maxTokens": 256,
+    "minSimilarity": 0.5
   },
   "contextHorizon": {
     "charsPerToken": 4,

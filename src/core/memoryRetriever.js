@@ -3,7 +3,7 @@ import { queryMemories } from './vectraStore.js';
 import config from '../config.js';
 
 const SYSTEM = `/no_think
-You are given a conversation context and numbered candidate memories. Output only the numbers of memories that are relevant to the context, comma-separated. If none are relevant, output nothing.`;
+You are given a conversation context and numbered candidate memories. Output only the numbers of memories that would meaningfully change or improve a response to this specific conversation — not memories that merely share a topic. When in doubt, exclude. Output comma-separated numbers only. If none qualify, output nothing.`;
 
 function log(label, data) {
   console.log(`[${new Date().toISOString()}] ${label}`, data ?? '');

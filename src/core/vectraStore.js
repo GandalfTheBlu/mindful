@@ -20,7 +20,10 @@ export async function addMemory(text) {
 export async function queryMemories(text, topK) {
   const vector = await embed(text);
   const results = await index.queryItems(vector, topK);
-  return results.map(r => r.item.metadata.text);
+  const minScore = config.memory.minSimilarity ?? 0.35;
+  return results
+    .filter(r => r.score >= minScore)
+    .map(r => r.item.metadata.text);
 }
 
 export async function wipeMemories() {
