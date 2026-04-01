@@ -116,7 +116,7 @@ function appendAssistantMessage(content) {
   div.className = 'message assistant';
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
-  bubble.textContent = content;
+  bubble.innerHTML = renderBold(content);
   div.appendChild(bubble);
   messages.appendChild(div);
   return { div, bubble };
@@ -201,6 +201,7 @@ form.addEventListener('submit', async e => {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let streamedText = '';
 
   while (true) {
     const { done, value } = await reader.read();
@@ -215,7 +216,9 @@ form.addEventListener('submit', async e => {
       const event = JSON.parse(line.slice(6));
 
       if (event.type === 'chunk') {
-        bubble.insertBefore(document.createTextNode(event.content), cursor);
+        streamedText += event.content;
+        bubble.innerHTML = renderBold(streamedText);
+        bubble.appendChild(cursor);
         scrollToBottom();
         setStatus('Generating…');
       } else if (event.type === 'title') {
@@ -305,6 +308,15 @@ inputEl.addEventListener('keydown', e => {
     form.requestSubmit();
   }
 });
+
+// --- Markdown rendering ---
+function renderBold(text) {
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
+}
 
 // --- Helpers ---
 function setUiEnabled(enabled) {
