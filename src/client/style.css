@@ -199,6 +199,24 @@ button:disabled { opacity: 0.35; cursor: default; }
   text-align: center;
 }
 
+/* Thought bubbles */
+.message.thought { align-items: flex-start; }
+.message.thought .message-bubble {
+  background: none;
+  border: 1px solid #2a3a2a;
+  color: #7a9a7a;
+  font-size: 12px;
+  font-style: italic;
+  max-width: 75%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  position: relative;
+}
+.message.thought .message-bubble::before {
+  content: '◦ ';
+  opacity: 0.6;
+}
+
 /* Memory pills */
 .memory-section {
   font-size: 11px;

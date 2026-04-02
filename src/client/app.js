@@ -122,6 +122,17 @@ function appendAssistantMessage(content) {
   return { div, bubble };
 }
 
+function appendThought(content) {
+  const div = document.createElement('div');
+  div.className = 'message thought';
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+  bubble.textContent = content;
+  div.appendChild(bubble);
+  messages.appendChild(div);
+  return div;
+}
+
 function buildMemorySection(injected, extracted) {
   const section = document.createElement('div');
   section.className = 'memory-section';
@@ -228,6 +239,9 @@ form.addEventListener('submit', async e => {
       } else if (event.type === 'extracting') {
         cursor.remove();
         setStatus('Storing memories…');
+      } else if (event.type === 'thought') {
+        appendThought(event.content);
+        scrollToBottom();
       } else if (event.type === 'done') {
         // Update user message with memory data
         currentSession.messages = currentSession.messages ?? [];

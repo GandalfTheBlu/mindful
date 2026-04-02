@@ -9,6 +9,8 @@ import {
   ensureDataDir, listSessions, getSession,
   saveSession, deleteSession, createSession
 } from './sessionStore.js';
+import scheduler from '../LLMScheduler.js';
+import { InnerThoughtsEngine } from '../thoughts/InnerThoughtsEngine.js';
 
 const app = express();
 const PORT = 3000;
@@ -27,9 +29,10 @@ function log(label, data) {
 const State = { IDLE: 'idle', RETRIEVING: 'retrieving', STREAMING: 'streaming', EXTRACTING: 'extracting' };
 let state = State.IDLE;
 
+// --- Inner thoughts engine ---
+const thoughtsEngine = new InnerThoughtsEngine();
+
 // --- In-memory session cache ---
-// Sessions are loaded from disk on first access and kept in memory.
-// The Save button is the only operation that writes back to disk.
 const sessionCache = new Map();
 
 function loadSession(id) {
@@ -107,9 +110,14 @@ app.post('/api/sessions/:id/chat', async (req, res) => {
 
   const isFirstMessage = session.messages.length === 0;
 
+  // Open the surfacing gate for this turn and keep engine aware of session
+  thoughtsEngine.setActiveSession(session);
+  thoughtsEngine.resetGate();
+
   try {
     // --- RETRIEVING ---
     state = State.RETRIEVING;
+    scheduler.acquire();
     const { llmMessages, userMsg } = await processMessage(session, content.trim());
 
     // Generate title on first message
@@ -156,10 +164,20 @@ app.post('/api/sessions/:id/chat', async (req, res) => {
     }
     userMsg.extractedMemories = extracted;
 
+    // Release lock — inner thoughts engine may now run
+    scheduler.release();
+
+    // Surface a pending thought if the engine already has one queued
+    const thought = thoughtsEngine.takePending();
+    if (thought) {
+      send({ type: 'thought', content: thought });
+    }
+
     send({ type: 'done', userMsg, extracted });
 
   } catch (err) {
     console.error(err);
+    scheduler.release();
     send({ type: 'error', message: err.message });
   } finally {
     state = State.IDLE;

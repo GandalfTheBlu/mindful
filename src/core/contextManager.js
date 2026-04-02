@@ -1,33 +1,15 @@
 import config from '../config.js';
 import { summarize } from './summarizer.js';
 import { retrieveMemories } from './memoryRetriever.js';
+import { ContextWindow } from '../context/ContextWindow.js';
 
 function log(label, data) {
   console.log(`[${new Date().toISOString()}] ${label}`, data ?? '');
 }
 
 const maxChars = config.llm.contextSize * config.contextHorizon.charsPerToken;
-const horizonThreshold = maxChars * config.contextHorizon.summarizeAtPercent;
-
+const horizonThreshold = Math.floor(maxChars * config.contextHorizon.summarizeAtPercent);
 const KEEP_RECENT = 4;
-
-function sessionChars(messages) {
-  return messages.reduce((sum, m) => sum + (m.llmContent ?? m.content).length, 0);
-}
-
-async function condenseIfNeeded(session) {
-  if (sessionChars(session.messages) <= horizonThreshold) return;
-
-  const toSummarize = session.messages.slice(0, -KEEP_RECENT);
-  const toKeep = session.messages.slice(-KEEP_RECENT);
-  if (toSummarize.length === 0) return;
-
-  const summaryText = await summarize(toSummarize);
-  session.messages = [
-    { role: 'system', content: `[Summary of earlier conversation]: ${summaryText}`, isSummary: true },
-    ...toKeep
-  ];
-}
 
 // Called before sending to LLM. Mutates session by appending the user message.
 // Returns { llmMessages, userMsg }.
@@ -40,8 +22,7 @@ export async function processMessage(session, userContent) {
     .join('\n')
     .slice(-retrievalWindowChars);
 
-  // Deduplicate against memories already in the current context window,
-  // either injected from Vectra or extracted from the user's own messages
+  // Deduplicate against memories already in the current context window
   const alreadyInContext = new Set(
     session.messages.flatMap(m => [
       ...(m.injectedMemories ?? []),
@@ -57,7 +38,12 @@ export async function processMessage(session, userContent) {
   log('memory:injecting', memories.length > 0 ? memories : '(none — all filtered or empty)');
 
   // Condense history if approaching horizon
-  await condenseIfNeeded(session);
+  const window = new ContextWindow(session.messages, {
+    maxChars: horizonThreshold,
+    summarizer: summarize,
+    keepRecent: KEEP_RECENT
+  });
+  await window.condenseIfNeeded();
 
   // Build llmContent for the new user message
   const llmContent = memories.length > 0

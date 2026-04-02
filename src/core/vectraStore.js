@@ -26,6 +26,11 @@ export async function queryMemories(text, topK) {
     .map(r => r.item.metadata.text);
 }
 
+export async function listAllMemories() {
+  const items = await index.listItems();
+  return items.map(i => i.metadata.text).filter(Boolean);
+}
+
 export async function wipeMemories() {
   const indexPath = path.join(config.dataDir, 'memories');
   fs.rmSync(indexPath, { recursive: true, force: true });
