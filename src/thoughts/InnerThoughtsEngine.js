@@ -9,7 +9,8 @@ function log(label, data) {
   console.log(`[${new Date().toISOString()}] [thoughts] ${label}`, data ?? '');
 }
 
-const THOUGHT_SYSTEM = `You are an inner reflection process running alongside a conversation. You receive:
+const THOUGHT_SYSTEM = `/no_think
+You are an inner reflection process running alongside a conversation. You receive:
 - Memories about the user (possibly unrelated to the current topic)
 - Recent conversation turns
 - Your own prior thoughts
@@ -44,6 +45,7 @@ export class InnerThoughtsEngine {
   constructor() {
     this._gate = new SurfacingGate();
     this._pending = null;
+    this._pendingResolve = null;
     this._activeSession = null;
     this._running = false;
 
@@ -74,6 +76,22 @@ export class InnerThoughtsEngine {
     const t = this._pending;
     this._pending = null;
     return t;
+  }
+
+  // Wait up to `ms` milliseconds for a thought to arrive, then consume it.
+  waitForPending(ms) {
+    if (this._pending !== null) return Promise.resolve(this.takePending());
+    return new Promise(resolve => {
+      const timer = setTimeout(() => {
+        this._pendingResolve = null;
+        resolve(null);
+      }, ms);
+      this._pendingResolve = (thought) => {
+        clearTimeout(timer);
+        this._pendingResolve = null;
+        resolve(thought);
+      };
+    });
   }
 
   async _onIdle() {
@@ -135,6 +153,7 @@ export class InnerThoughtsEngine {
     if (thought.score >= SCORE_THRESHOLD && this._gate.tryAcquire()) {
       log('surfacing', thought.text);
       this._pending = thought.text;
+      if (this._pendingResolve) this._pendingResolve(this.takePending());
     }
   }
 }

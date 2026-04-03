@@ -164,11 +164,10 @@ app.post('/api/sessions/:id/chat', async (req, res) => {
     }
     userMsg.extractedMemories = extracted;
 
-    // Release lock — inner thoughts engine may now run
+    // Release lock — inner thoughts engine may now run.
+    // Wait up to 5 s for it to finish before closing the stream.
     scheduler.release();
-
-    // Surface a pending thought if the engine already has one queued
-    const thought = thoughtsEngine.takePending();
+    const thought = await thoughtsEngine.waitForPending(5000);
     if (thought) {
       send({ type: 'thought', content: thought });
     }
