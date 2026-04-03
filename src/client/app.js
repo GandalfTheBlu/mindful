@@ -11,11 +11,6 @@ const btnNew = document.getElementById('btn-new');
 const btnSave = document.getElementById('btn-save');
 const chatTitle = document.getElementById('chat-title');
 
-// Insert status bar between messages and input-form
-const statusEl = document.createElement('div');
-statusEl.id = 'status';
-form.parentElement.insertBefore(statusEl, form);
-
 // --- API helpers ---
 async function api(method, path, body) {
   const res = await fetch(path, {
@@ -74,7 +69,7 @@ function renderSession(session) {
     if (msg.isSummary) {
       appendSummary(msg.content);
     } else if (msg.role === 'user') {
-      appendUserMessage(msg.content, msg.injectedMemories ?? [], msg.extractedMemories ?? []);
+      appendUserMessage(msg.content);
     } else if (msg.role === 'assistant') {
       appendAssistantMessage(msg.content);
     }
@@ -94,19 +89,13 @@ function appendSummary(text) {
   return div;
 }
 
-function appendUserMessage(content, injected = [], extracted = []) {
+function appendUserMessage(content) {
   const div = document.createElement('div');
   div.className = 'message user';
-
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
   bubble.textContent = content;
   div.appendChild(bubble);
-
-  if (injected.length > 0 || extracted.length > 0) {
-    div.appendChild(buildMemorySection(injected, extracted));
-  }
-
   messages.appendChild(div);
   return div;
 }
@@ -122,54 +111,6 @@ function appendAssistantMessage(content) {
   return { div, bubble };
 }
 
-function appendThought(content) {
-  const div = document.createElement('div');
-  div.className = 'message thought';
-  const bubble = document.createElement('div');
-  bubble.className = 'message-bubble';
-  bubble.textContent = content;
-  div.appendChild(bubble);
-  messages.appendChild(div);
-  return div;
-}
-
-function buildMemorySection(injected, extracted) {
-  const section = document.createElement('div');
-  section.className = 'memory-section';
-
-  const total = injected.length + extracted.length;
-  const toggle = document.createElement('button');
-  toggle.className = 'memory-toggle';
-  toggle.textContent = `▸ ${total} memor${total === 1 ? 'y' : 'ies'}`;
-
-  const list = document.createElement('div');
-  list.className = 'memory-list';
-  list.style.display = 'none';
-
-  for (const m of injected) {
-    const pill = document.createElement('div');
-    pill.className = 'memory-pill injected';
-    pill.textContent = `↓ ${m}`;
-    list.appendChild(pill);
-  }
-  for (const m of extracted) {
-    const pill = document.createElement('div');
-    pill.className = 'memory-pill extracted';
-    pill.textContent = `↑ ${m}`;
-    list.appendChild(pill);
-  }
-
-  toggle.addEventListener('click', () => {
-    const open = list.style.display !== 'none';
-    list.style.display = open ? 'none' : 'flex';
-    toggle.textContent = `${open ? '▸' : '▾'} ${total} memor${total === 1 ? 'y' : 'ies'}`;
-  });
-
-  section.appendChild(toggle);
-  section.appendChild(list);
-  return section;
-}
-
 // --- Send message ---
 form.addEventListener('submit', async e => {
   e.preventDefault();
@@ -179,13 +120,11 @@ form.addEventListener('submit', async e => {
   inputEl.value = '';
   inputEl.style.height = 'auto';
   setUiEnabled(false);
-  setStatus('Retrieving memories…');
 
-  // Optimistically render user bubble (no memories yet)
-  const userDiv = appendUserMessage(content);
+  appendUserMessage(content);
   scrollToBottom();
 
-  // Create streaming assistant bubble
+  // Streaming assistant bubble
   const assistantDiv = document.createElement('div');
   assistantDiv.className = 'message assistant';
   const bubble = document.createElement('div');
@@ -204,7 +143,7 @@ form.addEventListener('submit', async e => {
 
   if (!res.ok) {
     const err = await res.json();
-    setStatus(`Error: ${err.error}`);
+    bubble.textContent = `Error: ${err.error}`;
     setUiEnabled(true);
     return;
   }
@@ -231,33 +170,12 @@ form.addEventListener('submit', async e => {
         bubble.innerHTML = renderBold(streamedText);
         bubble.appendChild(cursor);
         scrollToBottom();
-        setStatus('Generating…');
-      } else if (event.type === 'title') {
-        currentSession.title = event.title;
-        chatTitle.textContent = event.title;
-        loadSessionList();
-      } else if (event.type === 'extracting') {
-        cursor.remove();
-        setStatus('Storing memories…');
-      } else if (event.type === 'thought') {
-        appendThought(event.content);
-        scrollToBottom();
       } else if (event.type === 'done') {
-        // Update user message with memory data
-        currentSession.messages = currentSession.messages ?? [];
-        const injected = event.userMsg.injectedMemories ?? [];
-        const extracted = event.extracted ?? [];
-
-        if (injected.length > 0 || extracted.length > 0) {
-          userDiv.appendChild(buildMemorySection(injected, extracted));
-        }
-
-        setStatus('');
+        cursor.remove();
         setUiEnabled(true);
       } else if (event.type === 'error') {
         cursor.remove();
         bubble.textContent = `Error: ${event.message}`;
-        setStatus('');
         setUiEnabled(true);
       }
     }
@@ -268,8 +186,6 @@ form.addEventListener('submit', async e => {
 btnSave.addEventListener('click', async () => {
   if (!currentSession) return;
   await api('PUT', `/api/sessions/${currentSession.id}`);
-  setStatus('Saved.');
-  setTimeout(() => setStatus(''), 2000);
 });
 
 // --- New session ---
@@ -340,10 +256,6 @@ function setUiEnabled(enabled) {
   if (enabled) inputEl.focus();
 }
 
-function setStatus(text) {
-  statusEl.textContent = text;
-}
-
 function scrollToBottom() {
   messages.scrollTop = messages.scrollHeight;
 }
@@ -359,8 +271,6 @@ function clearChat() {
 document.getElementById('btn-wipe-memory').addEventListener('click', async () => {
   if (!confirm('Wipe all stored memories? This cannot be undone.')) return;
   await api('DELETE', '/api/memories');
-  setStatus('Memory wiped.');
-  setTimeout(() => setStatus(''), 2000);
 });
 
 // --- Init ---

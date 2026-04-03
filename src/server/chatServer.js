@@ -1,16 +1,12 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { init as initVectra, addMemory, wipeMemories } from '../core/vectraStore.js';
-import { processMessage } from '../core/contextManager.js';
-import { extractMemories } from '../core/memoryExtractor.js';
-import { complete, stream } from '../llm.js';
+import { init as initVectra, wipeMemories } from '../core/vectraStore.js';
 import {
   ensureDataDir, listSessions, getSession,
   saveSession, deleteSession, createSession
 } from './sessionStore.js';
-import scheduler from '../LLMScheduler.js';
-import { InnerThoughtsEngine } from '../thoughts/InnerThoughtsEngine.js';
+import { CognitivePipeline } from '../pipeline/CognitivePipeline.js';
 
 const app = express();
 const PORT = 3000;
@@ -19,18 +15,7 @@ const __dir = path.dirname(fileURLToPath(import.meta.url));
 app.use(express.json());
 app.use(express.static(path.join(__dir, '..', 'client')));
 
-const SYSTEM_PROMPT = `You are an AI having a casual conversation. Be direct and natural — no bullet points, no formal structure, no assistant-speak. Do not pretend to be human. Do not claim to have personal experiences, feelings, hobbies, or opinions you don't actually have. If something doesn't apply to you as an AI, just say so plainly. Stay honest, stay casual.`;
-
-function log(label, data) {
-  console.log(`[${new Date().toISOString()}] ${label}`, data ?? '');
-}
-
-// --- State machine ---
-const State = { IDLE: 'idle', RETRIEVING: 'retrieving', STREAMING: 'streaming', EXTRACTING: 'extracting' };
-let state = State.IDLE;
-
-// --- Inner thoughts engine ---
-const thoughtsEngine = new InnerThoughtsEngine();
+const pipeline = new CognitivePipeline();
 
 // --- In-memory session cache ---
 const sessionCache = new Map();
@@ -87,10 +72,10 @@ app.delete('/api/memories', async (req, res) => {
 });
 
 // --- Chat route (SSE) ---
+let busy = false;
+
 app.post('/api/sessions/:id/chat', async (req, res) => {
-  if (state !== State.IDLE) {
-    return res.status(409).json({ error: 'Busy', state });
-  }
+  if (busy) return res.status(409).json({ error: 'Busy' });
 
   const session = loadSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
@@ -98,7 +83,6 @@ app.post('/api/sessions/:id/chat', async (req, res) => {
   const { content } = req.body;
   if (!content?.trim()) return res.status(400).json({ error: 'Empty message' });
 
-  // SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -108,78 +92,21 @@ app.post('/api/sessions/:id/chat', async (req, res) => {
     res.write(`data: ${JSON.stringify(obj)}\n\n`);
   }
 
-  const isFirstMessage = session.messages.length === 0;
-
-  // Open the surfacing gate for this turn and keep engine aware of session
-  thoughtsEngine.setActiveSession(session);
-  thoughtsEngine.resetGate();
+  busy = true;
 
   try {
-    // --- RETRIEVING ---
-    state = State.RETRIEVING;
-    scheduler.acquire();
-    const { llmMessages, userMsg } = await processMessage(session, content.trim());
+    await pipeline.process(session, content.trim(), chunk => {
+      send({ type: 'chunk', content: chunk });
+    });
 
-    // Generate title on first message
-    if (isFirstMessage) {
-      const title = await complete(
-        [
-          { role: 'system', content: 'Generate a short title (3-6 words) for a conversation starting with this message. Output only the title, no quotes.' },
-          { role: 'user', content: content.trim() }
-        ],
-        { max_tokens: 20 }
-      );
-      session.title = title.trim();
-      send({ type: 'title', title: session.title });
-    }
-
-    // --- STREAMING ---
-    state = State.STREAMING;
-    let assistantContent = '';
-
-    await stream(
-      [{ role: 'system', content: SYSTEM_PROMPT }, ...llmMessages],
-      chunk => {
-        assistantContent += chunk;
-        send({ type: 'chunk', content: chunk });
-      }
-    );
-
-    const assistantMsg = { role: 'assistant', content: assistantContent };
-    session.messages.push(assistantMsg);
-
-    send({ type: 'assistant', message: assistantMsg });
-
-    // --- EXTRACTING ---
-    state = State.EXTRACTING;
-    send({ type: 'extracting' });
-
-    log('memory:extract:input', content.trim());
-    const extracted = await extractMemories(content.trim(), session.messages.slice(0, -2));
-    log('memory:extract:result', extracted.length > 0 ? extracted : '(nothing)');
-
-    for (const fact of extracted) {
-      await addMemory(fact);
-      log('memory:stored', fact);
-    }
-    userMsg.extractedMemories = extracted;
-
-    // Release lock — inner thoughts engine may now run.
-    // Wait up to 5 s for it to finish before closing the stream.
-    scheduler.release();
-    const thought = await thoughtsEngine.waitForPending(5000);
-    if (thought) {
-      send({ type: 'thought', content: thought });
-    }
-
-    send({ type: 'done', userMsg, extracted });
+    saveSession(session);
+    send({ type: 'done' });
 
   } catch (err) {
     console.error(err);
-    scheduler.release();
     send({ type: 'error', message: err.message });
   } finally {
-    state = State.IDLE;
+    busy = false;
     res.end();
   }
 });

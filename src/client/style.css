@@ -9,8 +9,6 @@
   --accent: #4a90e2;
   --user-bg: #1e2a3a;
   --assistant-bg: #1a1a1a;
-  --memory-bg: #1e1e1e;
-  --memory-border: #333;
 }
 
 html, body { height: 100%; }
@@ -199,63 +197,6 @@ button:disabled { opacity: 0.35; cursor: default; }
   text-align: center;
 }
 
-/* Thought bubbles */
-.message.thought { align-items: flex-start; }
-.message.thought .message-bubble {
-  background: none;
-  border: 1px solid #2a3a2a;
-  color: #7a9a7a;
-  font-size: 12px;
-  font-style: italic;
-  max-width: 75%;
-  padding: 8px 12px;
-  border-radius: 8px;
-  position: relative;
-}
-.message.thought .message-bubble::before {
-  content: '◦ ';
-  opacity: 0.6;
-}
-
-/* Memory pills */
-.memory-section {
-  font-size: 11px;
-  max-width: 80%;
-}
-.message.user .memory-section { align-self: flex-end; }
-
-.memory-toggle {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-size: 11px;
-  padding: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.memory-toggle:hover { color: var(--text); background: none; border: none; }
-
-.memory-list {
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.memory-pill {
-  background: var(--memory-bg);
-  border: 1px solid var(--memory-border);
-  border-radius: 4px;
-  padding: 3px 8px;
-  color: var(--text-dim);
-  font-size: 11px;
-}
-
-.memory-pill.injected { border-color: #2a3a4a; color: #6a9aba; }
-.memory-pill.extracted { border-color: #2a3a2a; color: #6a9a6a; }
-
 /* Streaming indicator */
 .cursor {
   display: inline-block;
@@ -267,15 +208,6 @@ button:disabled { opacity: 0.35; cursor: default; }
   animation: blink 1s step-end infinite;
 }
 @keyframes blink { 50% { opacity: 0; } }
-
-/* Status bar */
-#status {
-  font-size: 11px;
-  color: var(--text-dim);
-  padding: 4px 20px;
-  border-top: 1px solid var(--border);
-  min-height: 22px;
-}
 
 /* Input */
 #input-form {

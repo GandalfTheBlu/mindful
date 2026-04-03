@@ -19,7 +19,7 @@ export function listSessions() {
     .map(f => {
       try {
         const s = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
-        return { id: s.id, title: s.title, createdAt: s.createdAt, messageCount: s.messages.length };
+        return { id: s.id, title: s.title || 'New conversation', createdAt: s.createdAt, messageCount: s.messages.length };
       } catch { return null; }
     })
     .filter(Boolean)
