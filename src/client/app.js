@@ -245,7 +245,9 @@ function renderBold(text) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-  return escaped.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
+  return escaped
+    .replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>')
+    .replace(/\*([^*]+?)\*/gs, '<em>$1</em>');
 }
 
 // --- Helpers ---
