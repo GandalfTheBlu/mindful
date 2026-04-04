@@ -16,7 +16,7 @@ You extract a single long-term fact about the user from what they explicitly wro
 - If the message contains no explicit personal facts, output <NOTHING>.
 - Output exactly one concise third-person statement starting with "The user". Nothing else.`;
 
-export async function extract(userContent, precedingMessages) {
+export async function extract(userContent, precedingMessages, userId) {
   const context = precedingMessages
     .slice(-6)
     .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
@@ -42,7 +42,7 @@ export async function extract(userContent, precedingMessages) {
   if (!fact) return [];
 
   log('result', fact);
-  await addMemory(fact);
+  await addMemory(userId, fact);
   log('stored', fact);
 
   return [fact];

@@ -1,3 +1,6 @@
+// --- Identity ---
+const USER_ID = 'Gandalf';
+
 // --- State ---
 let currentSession = null;
 
@@ -190,7 +193,7 @@ btnSave.addEventListener('click', async () => {
 
 // --- New session ---
 btnNew.addEventListener('click', async () => {
-  const session = await api('POST', '/api/sessions');
+  const session = await api('POST', '/api/sessions', { userId: USER_ID });
   currentSession = session;
   messages.innerHTML = '';
   chatTitle.textContent = session.title;
@@ -272,7 +275,7 @@ function clearChat() {
 // --- Wipe memory ---
 document.getElementById('btn-wipe-memory').addEventListener('click', async () => {
   if (!confirm('Wipe all stored memories? This cannot be undone.')) return;
-  await api('DELETE', '/api/memories');
+  await api('DELETE', `/api/memories?userId=${encodeURIComponent(currentSession.userId)}`);
 });
 
 // --- Memory search ---

@@ -27,9 +27,11 @@ export async function retrieve(session, userContent) {
     .slice(-retrievalWindowChars);
   const query = recentText + '\n' + userContent;
 
+  const { userId } = session;
+
   let injected = [];
   if (query.trim().length >= 20) {
-    const candidates = await queryMemories(query, maxInjectedMemories);
+    const candidates = await queryMemories(userId, query, maxInjectedMemories);
     log('candidates', candidates.length > 0 ? candidates : '(none)');
 
     if (candidates.length > 0) {
@@ -54,7 +56,7 @@ export async function retrieve(session, userContent) {
   log('injected', injected.length > 0 ? injected : '(none)');
 
   // --- Random sampling (thematic distance) ---
-  const all = await listAllMemories();
+  const all = await listAllMemories(userId);
   const sampled = all.length > 0
     ? [...all].sort(() => Math.random() - 0.5).slice(0, 3)
     : [];

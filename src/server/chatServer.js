@@ -1,3 +1,13 @@
+// --- Log buffer (must be first) ---
+const logBuffer = [];
+const _origLog = console.log;
+console.log = (...args) => {
+  const line = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+  logBuffer.push({ t: Date.now(), line });
+  if (logBuffer.length > 500) logBuffer.shift();
+  _origLog(...args);
+};
+
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -33,7 +43,9 @@ app.get('/api/sessions', (req, res) => {
 });
 
 app.post('/api/sessions', (req, res) => {
-  const session = createSession();
+  const userId = req.body?.userId;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  const session = createSession(userId);
   saveSession(session);
   sessionCache.set(session.id, session);
   res.json(session);
@@ -66,16 +78,24 @@ app.delete('/api/sessions/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/logs', (req, res) => {
+  const since = parseInt(req.query.since) || 0;
+  res.json(logBuffer.filter(e => e.t > since));
+});
+
 app.delete('/api/memories', async (req, res) => {
-  await wipeMemories();
+  const userId = req.query.userId;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  await wipeMemories(userId);
   res.json({ ok: true });
 });
 
 app.post('/api/memories/search', async (req, res) => {
-  const { query, limit } = req.body;
+  const { query, limit, userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
   if (!query?.trim()) return res.status(400).json({ error: 'Empty query' });
   const topK = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
-  const results = await searchMemories(query.trim(), topK);
+  const results = await searchMemories(userId, query.trim(), topK);
   res.json(results);
 });
 

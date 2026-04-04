@@ -42,7 +42,7 @@ function clusterBySimilarity(items, threshold) {
 
 // --- Pass 1: Decay ---
 // Remove memories that were never accessed and are older than decayAgeDays.
-async function decayPass(items) {
+async function decayPass(userId, items) {
   const cutoff = Date.now() - config.consolidation.decayAgeDays * 86_400_000;
 
   const toDelete = items
@@ -55,7 +55,7 @@ async function decayPass(items) {
 
   if (toDelete.length > 0) {
     log('decay:removing', toDelete.length);
-    await deleteItems(toDelete);
+    await deleteItems(userId, toDelete);
   }
 
   return toDelete.length;
@@ -66,7 +66,7 @@ async function decayPass(items) {
 const MERGE_SYSTEM = `/no_think
 Merge these related memory statements into one precise, concise statement starting with "The user". Preserve all distinct information but eliminate repetition. Output only the merged statement, nothing else.`;
 
-async function redundancyPass(items) {
+async function redundancyPass(userId, items) {
   const clusters = clusterBySimilarity(items, config.consolidation.redundancyThreshold);
   if (clusters.length === 0) return 0;
   log('redundancy:clusters', clusters.length);
@@ -89,7 +89,7 @@ async function redundancyPass(items) {
     if (!mergedText) continue;
 
     log('redundancy:merged', mergedText);
-    await replaceItems(cluster.map(i => i.id), mergedText);
+    await replaceItems(userId, cluster.map(i => i.id), mergedText);
     cluster.forEach(item => processed.add(item.id));
     merged++;
   }
@@ -105,7 +105,7 @@ Review these numbered memory statements. Identify direct factual contradictions 
 const CONTRADICTION_RESOLVE_SYSTEM = `/no_think
 These two memory statements contradict each other. Write one revised statement that reconciles them or keeps the more specific and credible information. Start with "The user". Output only the revised statement, nothing else.`;
 
-async function contradictionPass(items) {
+async function contradictionPass(userId, items) {
   if (items.length > config.consolidation.maxMemoriesForContradictionCheck) {
     log('contradiction:skip', `${items.length} items exceeds limit`);
     return 0;
@@ -153,7 +153,7 @@ async function contradictionPass(items) {
     if (!resolvedText) continue;
 
     log('contradiction:resolved', resolvedText);
-    await replaceItems([items[a].id, items[b].id], resolvedText);
+    await replaceItems(userId, [items[a].id, items[b].id], resolvedText);
     processed.add(items[a].id);
     processed.add(items[b].id);
     resolved++;
@@ -167,7 +167,7 @@ async function contradictionPass(items) {
 const ABSTRACT_SYSTEM = `/no_think
 These memory statements share a common theme. Write one general statement that captures the overall pattern. Start with "The user". Output only the statement, nothing else.`;
 
-async function abstractionPass(items) {
+async function abstractionPass(userId, items) {
   const { abstractionThreshold, abstractionMinClusterSize } = config.consolidation;
   const clusters = clusterBySimilarity(items, abstractionThreshold)
     .filter(c => c.length >= abstractionMinClusterSize);
@@ -193,7 +193,7 @@ async function abstractionPass(items) {
     if (!abstractText) continue;
 
     log('abstraction:abstracted', abstractText);
-    await replaceItems(cluster.map(i => i.id), abstractText);
+    await replaceItems(userId, cluster.map(i => i.id), abstractText);
     cluster.forEach(item => processed.add(item.id));
     abstracted++;
   }
@@ -202,17 +202,17 @@ async function abstractionPass(items) {
 }
 
 // --- Orchestrator ---
-export async function runConsolidation() {
+export async function runConsolidation(userId) {
   const { minMemoriesForLLMPasses } = config.consolidation;
 
-  let items = await listAllItems();
+  let items = await listAllItems(userId);
   if (items.length === 0) return;
 
-  log('start', `${items.length} memories`);
+  log('start', `[${userId}] ${items.length} memories`);
 
   // Pass 1: Decay — always runs, no LLM
-  const decayed = await decayPass(items);
-  if (decayed > 0) items = await listAllItems();
+  const decayed = await decayPass(userId, items);
+  if (decayed > 0) items = await listAllItems(userId);
 
   // Passes 2–4 only if enough memories remain
   if (items.length < minMemoriesForLLMPasses) {
@@ -221,15 +221,15 @@ export async function runConsolidation() {
   }
 
   // Pass 2: Redundancy
-  const merged = await redundancyPass(items);
-  if (merged > 0) items = await listAllItems();
+  const merged = await redundancyPass(userId, items);
+  if (merged > 0) items = await listAllItems(userId);
 
   // Pass 3: Contradiction
-  const resolved = await contradictionPass(items);
-  if (resolved > 0) items = await listAllItems();
+  const resolved = await contradictionPass(userId, items);
+  if (resolved > 0) items = await listAllItems(userId);
 
   // Pass 4: Abstraction
-  await abstractionPass(items);
+  await abstractionPass(userId, items);
 
   log('done', '');
 }

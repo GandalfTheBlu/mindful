@@ -34,15 +34,17 @@ export class CognitivePipeline {
     const assistantContent = await articulate(session, onChunk);
     session.messages.push({ role: 'assistant', content: assistantContent });
 
+    const { userId } = session;
+
     // --- Phase 3: Extract ---
     log('phase', 'extract');
-    const extracted = await extract(userContent, session.messages.slice(0, -2));
+    const extracted = await extract(userContent, session.messages.slice(0, -2), userId);
     userMsg.extractedMemories = extracted;
 
     // --- Consolidation (background maintenance) ---
     log('phase', 'consolidation');
     try {
-      await runConsolidation();
+      await runConsolidation(userId);
     } catch (err) {
       console.error('[pipeline] consolidation error:', err.message);
     }

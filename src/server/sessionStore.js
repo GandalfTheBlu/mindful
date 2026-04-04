@@ -41,9 +41,10 @@ export function deleteSession(id) {
   if (fs.existsSync(p)) fs.unlinkSync(p);
 }
 
-export function createSession() {
+export function createSession(userId) {
   return {
     id: uuidv4(),
+    userId,
     title: 'New conversation',
     createdAt: new Date().toISOString(),
     messages: []
