@@ -11,18 +11,28 @@
 - **Abstraction pass:** When N specific memories share a theme, replace them with a single generalization. Signal preserved, token cost reduced.
 - Trigger: run consolidation at session end, or when memory count crosses a configurable threshold.
 
+**Additional work completed beyond original spec:**
+- Multi-fact extraction: a single message can produce multiple self-contained memories for genuinely unrelated facts.
+- Date embedding: every extracted memory carries a `[YYYY-MM-DD]` tag in its text, enabling date-based similarity queries ("what did I do on X?") and temporal reasoning without metadata filtering.
+- LLM query expansion: before embedding the retrieval query, an LLM call rewrites it into a richer description of what personal information would be relevant — fixes cross-session retrieval for abstract/indirect references like "my instrument".
+- Retrieval deduplication fix: `alreadyInContext` now tracks only explicitly injected memories, not extracted ones — memories from earlier in a session are now injectable.
+- Removed random sampling: the random 3-memory sample injected every turn was pure noise, removed in favour of targeted retrieval only.
+- Consolidation ordering: contradiction pass runs before redundancy to prevent genuine updates from being merged away as near-duplicates before they can be resolved.
+- Abstraction is conservative by design (threshold 0.80, min cluster 6): specific facts are too valuable to collapse into vague generalisations unless the cluster is very large and tightly similar.
+
 ---
 
 ## Phase 2: Confidence-Weighted Memories
 
 **Goal:** Stop treating all extracted memories as ground truth — weight them by how strongly they were asserted.
 
+- **Filter meta-commentary at extraction time:** Messages like "Actually, I changed my mind" currently produce a junk memory ("The user changed their mind"). The extraction prompt should discard transient conversational statements and only store the substantive fact that follows. This is a prerequisite for confidence scoring — garbage in means garbage confidence scores.
 - Assign a confidence score at extraction time based on assertion strength:
   - High: explicit declarations ("I am a vegetarian"), or facts confirmed across multiple sessions
   - Medium: single hedged mention ("I'm kind of into hiking")
   - Low: inferred from subtext
 - Low-confidence memories: deprioritized at injection time, expired faster in consolidation.
-- **Validation loop:** When a topic recurs, compare new evidence against stored memory. Boost confidence on confirmation, drop on contradiction.
+- **Validation loop:** When a topic recurs, compare new evidence against stored memory. Boost confidence on confirmation, drop on contradiction. Note: silent contradiction resolution is already implemented — this adds the explicit score tracking and the hedging UX on top.
 - Let the LLM hedge when surfacing low-confidence memories: *"I think you mentioned X — is that still the case?"*
 
 ---
@@ -43,7 +53,7 @@
 **Goal:** Replace the flat fact list with typed memories that have different retrieval and injection strategies.
 
 - **Semantic** (current behavior): Timeless facts. Retrieved by similarity to current message. Injected into user message context.
-- **Episodic**: Timestamped events. *"On 2026-03-15, user was stressed about a job interview."* Retrieved by recency or event similarity. Enables *"last time you were in this situation..."*
+- **Episodic**: Timestamped events. *"On 2026-03-15, user was stressed about a job interview."* Retrieved by recency or event similarity. Enables *"last time you were in this situation..."* Note: basic date-based querying is already covered by the `[YYYY-MM-DD]` tag embedded in every memory text — this phase adds a distinct episodic type with its own index and richer recency-based retrieval strategy.
 - **Procedural**: Behavioral preferences about the LLM itself. *"User prefers concise answers."* Always injected into the system prompt, not the message.
 - **Goals/intentions**: Forward-looking facts. *"User wants to finish their novel by end of year."* Injected when the topic touches on planning or progress.
 - Each type needs its own metadata schema, injection logic, and potentially its own vector index.
