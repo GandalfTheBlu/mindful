@@ -31,23 +31,34 @@
 - Fast decay: low-confidence memories that are never accessed expire after 3 days instead of 14.
 - Access boost: every retrieval hit bumps confidence by +0.05 (capped at 1.0) — confirmed facts accumulate weight over time.
 - Confidence propagates through consolidation: contradiction resolution uses B's confidence, redundancy uses cluster average, abstraction uses cluster minimum.
-- Meta-commentary filter added to extraction prompt ("do not extract 'I changed my mind'…").
+- Meta-commentary filter added to extraction prompt.
+- Factual corrections ("actually I quit", "actually it's X") correctly rated high-confidence, not penalised for the word "actually".
+
+**Additional work completed beyond original spec:**
+- Code-level question guard: messages that start with a question word and end with `?` skip extraction entirely — the 8B model cannot reliably follow the "output NOTHING for questions" rule in the prompt alone.
+- Specificity rule: extraction prompt now requires specific details (events, causes, outcomes) to appear in the statement rather than being collapsed into a vague general assessment.
+- Contradiction sort: items sorted by `createdAt` ascending before contradiction pass so B is always genuinely newer than A.
+- Temporal superseding: contradiction detection prompt extended to catch superseded states ("was struggling with X, now X is resolved") — prevents these from being merged as near-duplicates by the redundancy pass instead.
+- Date granularity: timestamps embedded in memory text use `[YYYY-MM-DD HH:MM:SS]` format for better temporal resolution.
+- Consolidation log clarity: each operation now logs the full source memories and the resulting merged/resolved text.
+- UI: user selector in sidebar with dropdown of known users, `localStorage` persistence, per-user session filtering.
+- API: `GET /api/users`, `DELETE /api/sessions?userId=` endpoints added.
 
 **Observed limitations:**
-- Meta-commentary filter is partially effective with an 8B model — "The user changed their mind about hiking" still sometimes leaks through as a memory, but the substantive fact is also captured and consolidation produces a correct result.
-- Awkward phrasing is sometimes preserved verbatim in low-confidence memories (e.g. "sort of vaguely wonder if perhaps…"), but the low confidence (0.3) ensures fast decay if never confirmed.
-- The contradiction pass's single-pass processed-set means only one pair per cluster gets resolved per consolidation run — stale memories from a 3-way contradiction cluster can survive one consolidation cycle. Resolves on the next run.
+- Confidence calibration is inconsistent with the 8B model — past-continuous constructions like "I've been stressed" are sometimes rated high instead of medium. Accepted: low-stakes, doesn't affect correctness.
+- Emotional pattern observation fires on retrieved memories from the *previous* state (e.g. fires "Stress pattern" even when the current message says things improved). The LLM handles this gracefully since it has the full context, but a future pass could filter observations against the current message's sentiment.
+- The contradiction pass's single-pass processed-set means only one pair per cluster gets resolved per consolidation run — stale memories from a 3-way contradiction cluster can survive one cycle. Resolves on the next run.
 
 ---
 
-## Phase 3: Proactive Pattern Recognition
+## ~~Phase 3: Proactive Pattern Recognition~~ ✓
 
 **Goal:** Surface meta-patterns in memories so the LLM can reason about the user, not just recall facts.
 
-- **Recurrence detection:** If memories cluster around a theme that has been raised 4+ times across sessions, inject a meta-observation into the system prompt for that turn.
-- **Emotional tone patterns:** Track recurring themes of stress, uncertainty, enthusiasm, etc. Surface gently when directly relevant to the current message.
-- **Contradiction surfacing:** Instead of silently resolving contradictions, let the LLM name them when contextually appropriate.
-- Design constraint: proactive surfacing should only trigger when relevant to the current message — not on every turn. Consider making it opt-in.
+- **Recurrence detection:** Broad query fetches top-12 memories; if 4+ are returned, an LLM call produces a meta-observation injected into the system prompt for that turn only (not stored as a memory).
+- **Emotional tone patterns:** Keyword gate (stress/anxiety/overwhelm/excited/frustrated/etc.) on candidate memories; if triggered, an LLM call produces an emotional-pattern observation injected into the system prompt.
+- **Contradiction surfacing:** Decided against explicit surfacing — contradictions are resolved by the consolidation pass, and injected memories naturally provide both sides of a conflict when both are retrieved, letting the LLM reason about them contextually. This is less intrusive than explicit surfacing.
+- Observations are one-shot per turn: injected into the system prompt only, never stored as memories, never re-surfaced next turn.
 
 ---
 

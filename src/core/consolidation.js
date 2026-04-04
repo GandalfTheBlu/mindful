@@ -8,14 +8,15 @@ function log(label, data) {
 
 // Strip and re-attach the [YYYY-MM-DD] date tag so consolidation LLM calls
 // never see or hallucinate dates, and merged results always carry today's date.
-const DATE_TAG = /\s*\[\d{4}-\d{2}-\d{2}\]$/;
+const DATE_TAG = /\s*\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\]$/;
 
 function stripDate(text) {
   return text.replace(DATE_TAG, '');
 }
 
 function redate(text) {
-  return `${stripDate(text)} [${new Date().toISOString().slice(0, 10)}]`;
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  return `${stripDate(text)} [${now}]`;
 }
 
 function cosineSim(a, b) {
@@ -118,7 +119,10 @@ async function redundancyPass(userId, items) {
 // --- Pass 3: Contradiction ---
 // Detect and resolve memories that directly contradict each other.
 const CONTRADICTION_DETECT_SYSTEM = `/no_think
-Review these numbered memory statements. Identify direct factual contradictions — where one statement makes the other factually impossible (e.g. "hates coffee" vs "loves coffee", "lives in Paris" vs "lives in Berlin"). Two different facts about the same topic are NOT contradictions. Output only the conflicting index pairs as "X vs Y", one per line. If none, output NONE.`;
+Review these numbered memory statements. Identify pairs that cannot both be currently true:
+- Direct factual contradictions: one statement makes the other factually impossible.
+- Temporal superseding: one statement describes a state that has clearly been resolved or replaced by another (e.g. was struggling with something that the other statement says is now resolved).
+Two different facts about the same topic are NOT contradictions. Output only the conflicting index pairs as "X vs Y", one per line. If none, output NONE.`;
 
 const CONTRADICTION_RESOLVE_SYSTEM = `/no_think
 These two memory statements contradict each other. Statement B is more recent than statement A. Prefer the more recent information (B) unless A is clearly more specific or detailed. If the user explicitly updated their position (phrases like "actually", "changed my mind", "now I"), keep only B. Start with "The user". Output only the revised statement, nothing else.`;
@@ -129,7 +133,11 @@ async function contradictionPass(userId, items) {
     return 0;
   }
 
-  const numbered = items.map((item, i) => `${i + 1}. ${stripDate(item.metadata.text)}`).join('\n');
+  // Sort by createdAt ascending so that when the LLM picks between A and B,
+  // B is always the more recent statement (as the resolve prompt promises).
+  const sorted = [...items].sort((a, b) => (a.metadata.createdAt ?? 0) - (b.metadata.createdAt ?? 0));
+
+  const numbered = sorted.map((item, i) => `${i + 1}. ${stripDate(item.metadata.text)}`).join('\n');
   const response = await complete(
     [
       { role: 'system', content: CONTRADICTION_DETECT_SYSTEM },
@@ -157,24 +165,24 @@ async function contradictionPass(userId, items) {
   let resolved = 0;
 
   for (const [a, b] of pairs) {
-    if (processed.has(items[a].id) || processed.has(items[b].id)) continue;
+    if (processed.has(sorted[a].id) || processed.has(sorted[b].id)) continue;
 
     const result = await complete(
       [
         { role: 'system', content: CONTRADICTION_RESOLVE_SYSTEM },
-        { role: 'user', content: `A: ${stripDate(items[a].metadata.text)}\nB: ${stripDate(items[b].metadata.text)}` }
+        { role: 'user', content: `A: ${stripDate(sorted[a].metadata.text)}\nB: ${stripDate(sorted[b].metadata.text)}` }
       ],
       { max_tokens: config.memory.maxTokens }
     );
     const resolvedText = result.trim();
     if (!resolvedText) continue;
 
-    const resolvedConfidence = items[b].metadata.confidence ?? 1.0;
+    const resolvedConfidence = sorted[b].metadata.confidence ?? 1.0;
     const datedResolution = redate(resolvedText);
-    log('contradiction', `resolved conflict:\n  A: ${items[a].metadata.text}\n  B: ${items[b].metadata.text}\n  → ${datedResolution}`);
-    await replaceItems(userId, [items[a].id, items[b].id], datedResolution, resolvedConfidence);
-    processed.add(items[a].id);
-    processed.add(items[b].id);
+    log('contradiction', `resolved conflict:\n  A: ${sorted[a].metadata.text}\n  B: ${sorted[b].metadata.text}\n  → ${datedResolution}`);
+    await replaceItems(userId, [sorted[a].id, sorted[b].id], datedResolution, resolvedConfidence);
+    processed.add(sorted[a].id);
+    processed.add(sorted[b].id);
     resolved++;
   }
 
