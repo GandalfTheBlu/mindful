@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "mindful": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["src/mcp/server.js"],
+      "cwd": "C:\\mindful"
+    }
+  }
+}

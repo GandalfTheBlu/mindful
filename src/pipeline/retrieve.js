@@ -1,5 +1,5 @@
 import { complete } from '../llm.js';
-import { queryMemories, listAllMemories } from '../core/vectraStore.js';
+import { queryMemories } from '../core/vectraStore.js';
 import config from '../config.js';
 
 function log(label, data) {
@@ -7,17 +7,14 @@ function log(label, data) {
 }
 
 const FILTER_SYSTEM = `/no_think
-You are given a conversation context and numbered candidate memories. Output only the numbers of memories that would meaningfully change or improve a response to this specific conversation — not memories that merely share a topic. When in doubt, exclude. Output comma-separated numbers only. If none qualify, output nothing.`;
+You are given a conversation context and numbered candidate memories. Output ONLY the numbers of memories that directly relate to the topic at hand and would meaningfully change the response. Memories that merely share a subject area do not qualify. Be conservative — if in doubt, exclude. Output comma-separated numbers only. If none qualify, output nothing.`;
 
 export async function retrieve(session, userContent) {
   const { retrievalWindowChars, maxInjectedMemories } = config.memory;
 
-  // Build deduplication set from memories already in context
+  // Build deduplication set from memories already explicitly injected into context
   const alreadyInContext = new Set(
-    session.messages.flatMap(m => [
-      ...(m.injectedMemories ?? []),
-      ...(m.extractedMemories ?? [])
-    ])
+    session.messages.flatMap(m => m.injectedMemories ?? [])
   );
 
   // --- Targeted retrieval ---
@@ -55,13 +52,5 @@ export async function retrieve(session, userContent) {
 
   log('injected', injected.length > 0 ? injected : '(none)');
 
-  // --- Random sampling (thematic distance) ---
-  const all = await listAllMemories(userId);
-  const sampled = all.length > 0
-    ? [...all].sort(() => Math.random() - 0.5).slice(0, 3)
-    : [];
-
-  log('sampled', sampled.length > 0 ? sampled : '(none)');
-
-  return { injected, sampled };
+  return { injected };
 }

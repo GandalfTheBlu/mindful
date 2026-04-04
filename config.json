@@ -25,7 +25,7 @@
     "redundancyThreshold": 0.88,
     "abstractionThreshold": 0.72,
     "abstractionMinClusterSize": 4,
-    "minMemoriesForLLMPasses": 10,
+    "minMemoriesForLLMPasses": 5,
     "maxMemoriesForContradictionCheck": 40
   },
   "contextHorizon": {

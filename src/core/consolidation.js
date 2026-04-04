@@ -100,10 +100,10 @@ async function redundancyPass(userId, items) {
 // --- Pass 3: Contradiction ---
 // Detect and resolve memories that directly contradict each other.
 const CONTRADICTION_DETECT_SYSTEM = `/no_think
-Review these numbered memory statements. Identify direct factual contradictions between pairs. Output only the conflicting index pairs as "X vs Y", one per line. If none, output NONE.`;
+Review these numbered memory statements. Identify direct factual contradictions — where one statement makes the other factually impossible (e.g. "hates coffee" vs "loves coffee", "lives in Paris" vs "lives in Berlin"). Two different facts about the same topic are NOT contradictions. Output only the conflicting index pairs as "X vs Y", one per line. If none, output NONE.`;
 
 const CONTRADICTION_RESOLVE_SYSTEM = `/no_think
-These two memory statements contradict each other. Write one revised statement that reconciles them or keeps the more specific and credible information. Start with "The user". Output only the revised statement, nothing else.`;
+These two memory statements contradict each other. Statement B is more recent than statement A. Prefer the more recent information (B) unless A is clearly more specific or detailed. If the user explicitly updated their position (phrases like "actually", "changed my mind", "now I"), keep only B. Start with "The user". Output only the revised statement, nothing else.`;
 
 async function contradictionPass(userId, items) {
   if (items.length > config.consolidation.maxMemoriesForContradictionCheck) {

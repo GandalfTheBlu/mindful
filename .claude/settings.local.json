@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__mindful__create_session",
+      "mcp__mindful__get_logs",
+      "mcp__mindful__chat",
+      "mcp__mindful__search_memories"
+    ]
+  }
+}

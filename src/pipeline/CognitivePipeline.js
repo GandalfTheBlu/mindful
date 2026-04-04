@@ -2,6 +2,7 @@ import { retrieve } from './retrieve.js';
 import { articulate } from './articulate.js';
 import { extract } from './extract.js';
 import { runConsolidation } from '../core/consolidation.js';
+import { listAllItems } from '../core/vectraStore.js';
 
 function log(label, data) {
   console.log(`[${new Date().toISOString()}] [pipeline] ${label}`, data ?? '');
@@ -13,11 +14,10 @@ export class CognitivePipeline {
 
     // --- Phase 1: Retrieve ---
     log('phase', 'retrieve');
-    const { injected, sampled } = await retrieve(session, userContent);
+    const { injected } = await retrieve(session, userContent);
 
-    const allMemories = [...new Set([...injected, ...sampled])];
-    const llmContent = allMemories.length > 0
-      ? `${userContent}\n\n[Relevant memories]:\n${allMemories.join('\n')}`
+    const llmContent = injected.length > 0
+      ? `${userContent}\n\n[Relevant memories]:\n${injected.join('\n')}`
       : userContent;
 
     const userMsg = {
@@ -38,15 +38,21 @@ export class CognitivePipeline {
 
     // --- Phase 3: Extract ---
     log('phase', 'extract');
+    const countBefore = (await listAllItems(userId)).length;
     const extracted = await extract(userContent, session.messages.slice(0, -2), userId);
     userMsg.extractedMemories = extracted;
 
-    // --- Consolidation (background maintenance) ---
-    log('phase', 'consolidation');
-    try {
-      await runConsolidation(userId);
-    } catch (err) {
-      console.error('[pipeline] consolidation error:', err.message);
+    // --- Consolidation: run when every 5th memory is stored ---
+    if (extracted.length > 0) {
+      const countAfter = (await listAllItems(userId)).length;
+      if (Math.floor(countAfter / 5) > Math.floor(countBefore / 5)) {
+        log('phase', 'consolidation');
+        try {
+          await runConsolidation(userId);
+        } catch (err) {
+          console.error('[pipeline] consolidation error:', err.message);
+        }
+      }
     }
 
     log('turn:done', '');
