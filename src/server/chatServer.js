@@ -13,8 +13,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { init as initVectra, wipeMemories, searchMemories } from '../core/vectraStore.js';
 import {
-  ensureDataDir, listSessions, getSession,
-  saveSession, deleteSession, createSession
+  ensureDataDir, listSessions, listUsers, getSession,
+  saveSession, deleteSession, deleteUserSessions, createSession
 } from './sessionStore.js';
 import { CognitivePipeline } from '../pipeline/CognitivePipeline.js';
 
@@ -38,8 +38,13 @@ function loadSession(id) {
 }
 
 // --- Session routes ---
+app.get('/api/users', (req, res) => {
+  res.json(listUsers());
+});
+
 app.get('/api/sessions', (req, res) => {
-  res.json(listSessions());
+  const userId = req.query.userId || null;
+  res.json(listSessions(userId));
 });
 
 app.post('/api/sessions', (req, res) => {
@@ -81,6 +86,13 @@ app.delete('/api/sessions/:id', (req, res) => {
 app.get('/api/logs', (req, res) => {
   const since = parseInt(req.query.since) || 0;
   res.json(logBuffer.filter(e => e.t > since));
+});
+
+app.delete('/api/sessions', (req, res) => {
+  const userId = req.query.userId;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  const count = deleteUserSessions(userId);
+  res.json({ deleted: count });
 });
 
 app.delete('/api/memories', async (req, res) => {

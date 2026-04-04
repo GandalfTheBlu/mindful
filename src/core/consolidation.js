@@ -60,24 +60,21 @@ async function decayPass(userId, items) {
   const uncertainThreshold = config.confidence?.uncertainThreshold ?? 0.5;
   const fastCutoff = Date.now() - fastDecayAgeDays * 86_400_000;
 
-  const toDelete = items
-    .filter(item => {
-      const accessCount = item.metadata.accessCount ?? 0;
-      const lastAccessed = item.metadata.lastAccessed ?? item.metadata.createdAt ?? 0;
-      const confidence = item.metadata.confidence ?? 1.0;
-      // Fast-decay: low-confidence, never accessed, older than fastDecayAgeDays
-      if (confidence < uncertainThreshold && accessCount === 0 && lastAccessed < fastCutoff) return true;
-      // Normal decay: never accessed, older than decayAgeDays
-      return accessCount === 0 && lastAccessed < cutoff;
-    })
-    .map(item => item.id);
+  const toDeleteItems = items.filter(item => {
+    const accessCount = item.metadata.accessCount ?? 0;
+    const lastAccessed = item.metadata.lastAccessed ?? item.metadata.createdAt ?? 0;
+    const confidence = item.metadata.confidence ?? 1.0;
+    if (confidence < uncertainThreshold && accessCount === 0 && lastAccessed < fastCutoff) return true;
+    return accessCount === 0 && lastAccessed < cutoff;
+  });
 
-  if (toDelete.length > 0) {
-    log('decay:removing', toDelete.length);
-    await deleteItems(userId, toDelete);
+  if (toDeleteItems.length > 0) {
+    const lines = toDeleteItems.map(i => `  - ${i.metadata.text}`).join('\n');
+    log('decay', `expired ${toDeleteItems.length} memories:\n${lines}`);
+    await deleteItems(userId, toDeleteItems.map(i => i.id));
   }
 
-  return toDelete.length;
+  return toDeleteItems.length;
 }
 
 // --- Pass 2: Redundancy ---
@@ -88,7 +85,6 @@ Merge these related memory statements into one precise, concise statement starti
 async function redundancyPass(userId, items) {
   const clusters = clusterBySimilarity(items, config.consolidation.redundancyThreshold);
   if (clusters.length === 0) return 0;
-  log('redundancy:clusters', clusters.length);
 
   const processed = new Set();
   let merged = 0;
@@ -109,7 +105,8 @@ async function redundancyPass(userId, items) {
 
     const avgConfidence = cluster.reduce((s, i) => s + (i.metadata.confidence ?? 1.0), 0) / cluster.length;
     const datedMerge = redate(mergedText);
-    log('redundancy:merged', datedMerge);
+    const sources = cluster.map(i => `  - ${i.metadata.text}`).join('\n');
+    log('redundancy', `merged ${cluster.length} memories:\n${sources}\n  → ${datedMerge}`);
     await replaceItems(userId, cluster.map(i => i.id), datedMerge, avgConfidence);
     cluster.forEach(item => processed.add(item.id));
     merged++;
@@ -155,7 +152,6 @@ async function contradictionPass(userId, items) {
   }
 
   if (pairs.length === 0) return 0;
-  log('contradiction:pairs', pairs.length);
 
   const processed = new Set();
   let resolved = 0;
@@ -175,7 +171,7 @@ async function contradictionPass(userId, items) {
 
     const resolvedConfidence = items[b].metadata.confidence ?? 1.0;
     const datedResolution = redate(resolvedText);
-    log('contradiction:resolved', datedResolution);
+    log('contradiction', `resolved conflict:\n  A: ${items[a].metadata.text}\n  B: ${items[b].metadata.text}\n  → ${datedResolution}`);
     await replaceItems(userId, [items[a].id, items[b].id], datedResolution, resolvedConfidence);
     processed.add(items[a].id);
     processed.add(items[b].id);
@@ -196,7 +192,6 @@ async function abstractionPass(userId, items) {
     .filter(c => c.length >= abstractionMinClusterSize);
 
   if (clusters.length === 0) return 0;
-  log('abstraction:clusters', clusters.length);
 
   const processed = new Set();
   let abstracted = 0;
@@ -217,7 +212,8 @@ async function abstractionPass(userId, items) {
 
     const minConfidence = Math.min(...cluster.map(i => i.metadata.confidence ?? 1.0));
     const datedAbstraction = redate(abstractText);
-    log('abstraction:abstracted', datedAbstraction);
+    const sources = cluster.map(i => `  - ${i.metadata.text}`).join('\n');
+    log('abstraction', `abstracted ${cluster.length} memories:\n${sources}\n  → ${datedAbstraction}`);
     await replaceItems(userId, cluster.map(i => i.id), datedAbstraction, minConfidence);
     cluster.forEach(item => processed.add(item.id));
     abstracted++;

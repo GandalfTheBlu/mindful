@@ -28,6 +28,9 @@
     "minMemoriesForLLMPasses": 5,
     "maxMemoriesForContradictionCheck": 40
   },
+  "patternRecognition": {
+    "recurrenceThreshold": 4
+  },
   "confidence": {
     "boostOnAccess": 0.05,
     "uncertainThreshold": 0.5,

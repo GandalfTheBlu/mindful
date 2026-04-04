@@ -44,6 +44,10 @@ Core Context System (Node.js)  ← context management layer
 - **Frontend:** HTML, CSS, vanilla JS
 - **LLM backend:** llama.cpp (via HTTP API)
 
+## Working Conventions
+
+- **LLM prompts must stay general.** When adding or editing prompt strings, express rules in abstract terms only. Do not embed specific examples drawn from the current task or the user's input — write prompts to solve the class of problem, not the instance in front of you.
+
 ## Config (`config.json`)
 
 | Key | Description |

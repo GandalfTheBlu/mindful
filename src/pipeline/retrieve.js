@@ -43,8 +43,9 @@ export async function retrieve(session, userContent) {
   const { userId } = session;
 
   let injected = [];
+  let expandedQuery = userContent;
   if (userContent.trim().length >= 20) {
-    const expandedQuery = await expandQuery(userMessagesText, userContent);
+    expandedQuery = await expandQuery(userMessagesText, userContent);
     log('expanded-query', expandedQuery);
     const candidates = await queryMemories(userId, expandedQuery, maxInjectedMemories);
     log('candidates', candidates.length > 0 ? candidates : '(none)');
@@ -75,5 +76,5 @@ export async function retrieve(session, userContent) {
 
   log('injected', injectedTexts.length > 0 ? injectedTexts : '(none)');
 
-  return { injected: injectedTexts, injectedFormatted };
+  return { injected: injectedTexts, injectedFormatted, expandedQuery };
 }

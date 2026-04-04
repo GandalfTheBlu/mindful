@@ -64,6 +64,54 @@ body {
 }
 #btn-new:hover { background: var(--border); }
 
+#user-bar {
+  position: relative;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+#user-dropdown {
+  position: absolute;
+  top: calc(100% - 1px);
+  left: 8px;
+  right: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0 0 6px 6px;
+  z-index: 10;
+  list-style: none;
+  padding: 4px 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+#user-dropdown li {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#user-dropdown li:hover { background: var(--border); color: var(--text); }
+#user-dropdown li.active { color: var(--accent); }
+
+#user-display {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 3px 6px;
+  cursor: pointer;
+  outline: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#user-display::before { content: '@ '; opacity: 0.5; }
+#user-display:hover { background: var(--border); color: var(--text); }
+#user-display[contenteditable="true"] { background: var(--border); color: var(--text); cursor: text; outline: 1px solid var(--accent); }
+
 #session-list {
   list-style: none;
   overflow-y: auto;

@@ -22,18 +22,21 @@
 
 ---
 
-## Phase 2: Confidence-Weighted Memories
+## ~~Phase 2: Confidence-Weighted Memories~~ ✓
 
 **Goal:** Stop treating all extracted memories as ground truth — weight them by how strongly they were asserted.
 
-- **Filter meta-commentary at extraction time:** Messages like "Actually, I changed my mind" currently produce a junk memory ("The user changed their mind"). The extraction prompt should discard transient conversational statements and only store the substantive fact that follows. This is a prerequisite for confidence scoring — garbage in means garbage confidence scores.
-- Assign a confidence score at extraction time based on assertion strength:
-  - High: explicit declarations ("I am a vegetarian"), or facts confirmed across multiple sessions
-  - Medium: single hedged mention ("I'm kind of into hiking")
-  - Low: inferred from subtext
-- Low-confidence memories: deprioritized at injection time, expired faster in consolidation.
-- **Validation loop:** When a topic recurs, compare new evidence against stored memory. Boost confidence on confirmation, drop on contradiction. Note: silent contradiction resolution is already implemented — this adds the explicit score tracking and the hedging UX on top.
-- Let the LLM hedge when surfacing low-confidence memories: *"I think you mentioned X — is that still the case?"*
+- Extraction prompt outputs `fact | high/medium/low`; mapped to 1.0 / 0.6 / 0.3 and stored in metadata.
+- Low-confidence memories (< 0.5) get an `[uncertain]` prefix when injected into LLM context.
+- Fast decay: low-confidence memories that are never accessed expire after 3 days instead of 14.
+- Access boost: every retrieval hit bumps confidence by +0.05 (capped at 1.0) — confirmed facts accumulate weight over time.
+- Confidence propagates through consolidation: contradiction resolution uses B's confidence, redundancy uses cluster average, abstraction uses cluster minimum.
+- Meta-commentary filter added to extraction prompt ("do not extract 'I changed my mind'…").
+
+**Observed limitations:**
+- Meta-commentary filter is partially effective with an 8B model — "The user changed their mind about hiking" still sometimes leaks through as a memory, but the substantive fact is also captured and consolidation produces a correct result.
+- Awkward phrasing is sometimes preserved verbatim in low-confidence memories (e.g. "sort of vaguely wonder if perhaps…"), but the low confidence (0.3) ensures fast decay if never confirmed.
+- The contradiction pass's single-pass processed-set means only one pair per cluster gets resolved per consolidation run — stale memories from a 3-way contradiction cluster can survive one consolidation cycle. Resolves on the next run.
 
 ---
 
