@@ -90,6 +90,18 @@ export async function listByType(userId, type) {
     .filter(Boolean);
 }
 
+export async function listByTypeWithMeta(userId, type) {
+  const index = await getIndex(userId);
+  const items = await index.listItems();
+  return items
+    .filter(i => (i.metadata.type ?? 'semantic') === type && i.metadata.text)
+    .map(i => ({
+      text: i.metadata.text,
+      createdAt: i.metadata.createdAt ?? 0,
+      lastAccessed: i.metadata.lastAccessed ?? i.metadata.createdAt ?? 0
+    }));
+}
+
 export async function replaceItems(userId, ids, newText, confidence = 1.0, type = 'semantic') {
   await deleteItems(userId, ids);
   await addMemory(userId, newText, confidence, type);

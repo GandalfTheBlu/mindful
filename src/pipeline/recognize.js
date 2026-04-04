@@ -1,6 +1,8 @@
 import { complete } from '../llm.js';
-import { queryMemories } from '../core/vectraStore.js';
+import { queryMemories, listByTypeWithMeta } from '../core/vectraStore.js';
 import config from '../config.js';
+
+const GOAL_STALE_DAYS = 7;
 
 function log(label, data) {
   console.log(`[${new Date().toISOString()}] [recognize] ${label}`, data ?? '');
@@ -93,6 +95,20 @@ export async function recognize(userId, injectedTexts, expandedQuery) {
         }
       }
     }
+  }
+
+  // --- Stale goal surfacing ---
+  // Surface goals that haven't been retrieved recently, so they stay top of mind
+  const goalItems = await listByTypeWithMeta(userId, 'goal');
+  const staleGoals = goalItems
+    .filter(g => {
+      const ageDays = (Date.now() - g.lastAccessed) / (1000 * 60 * 60 * 24);
+      return ageDays > GOAL_STALE_DAYS;
+    })
+    .slice(0, 2);
+  for (const g of staleGoals) {
+    log('stale-goal', g.text.slice(0, 80));
+    observations.push(`Active goal (not recently discussed): ${g.text}`);
   }
 
   return observations;

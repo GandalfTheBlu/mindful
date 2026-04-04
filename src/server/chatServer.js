@@ -17,6 +17,7 @@ import {
   saveSession, deleteSession, deleteUserSessions, createSession
 } from './sessionStore.js';
 import { CognitivePipeline } from '../pipeline/CognitivePipeline.js';
+import { generateOpener } from '../pipeline/opener.js';
 
 const app = express();
 const PORT = 3000;
@@ -109,6 +110,52 @@ app.post('/api/memories/search', async (req, res) => {
   const topK = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
   const results = await searchMemories(userId, query.trim(), topK);
   res.json(results);
+});
+
+// --- Session opener route (SSE) ---
+app.post('/api/sessions/:id/open', async (req, res) => {
+  const session = loadSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Not found' });
+
+  // Only generate an opener for a brand-new session with no messages
+  if (session.messages.length > 0) {
+    return res.status(200).json({ skipped: true });
+  }
+
+  // Compute days since the previous session for this user
+  const allSessions = listSessions(session.userId);
+  const previousSession = allSessions.find(s => s.id !== session.id);
+  let daysSinceLastSession = null;
+  if (previousSession?.createdAt) {
+    daysSinceLastSession = (Date.now() - new Date(previousSession.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  function send(obj) {
+    res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  }
+
+  try {
+    const content = await generateOpener(session, daysSinceLastSession, chunk => {
+      send({ type: 'chunk', content: chunk });
+    });
+
+    if (content) {
+      session.messages.push({ role: 'assistant', content });
+      saveSession(session);
+    }
+
+    send({ type: 'done', generated: !!content });
+  } catch (err) {
+    console.error(err);
+    send({ type: 'error', message: err.message });
+  } finally {
+    res.end();
+  }
 });
 
 // --- Chat route (SSE) ---

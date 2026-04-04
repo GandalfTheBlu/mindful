@@ -259,10 +259,63 @@ btnNew.addEventListener('click', async () => {
   currentSession = session;
   messages.innerHTML = '';
   chatTitle.textContent = session.title;
-  setUiEnabled(true);
+  setUiEnabled(false);
   await loadSessionList();
+  await streamOpener(session.id);
+  setUiEnabled(true);
   inputEl.focus();
 });
+
+async function streamOpener(sessionId) {
+  const res = await fetch(`/api/sessions/${sessionId}/open`, { method: 'POST' });
+  if (!res.ok || res.headers.get('content-type')?.includes('application/json')) return;
+
+  const assistantDiv = document.createElement('div');
+  assistantDiv.className = 'message assistant';
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  bubble.appendChild(cursor);
+  assistantDiv.appendChild(bubble);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let streamedText = '';
+  let hasContent = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const event = JSON.parse(line.slice(6));
+
+      if (event.type === 'chunk') {
+        if (!hasContent) {
+          messages.appendChild(assistantDiv);
+          hasContent = true;
+        }
+        streamedText += event.content;
+        bubble.innerHTML = renderBold(streamedText);
+        bubble.appendChild(cursor);
+        scrollToBottom();
+      } else if (event.type === 'done') {
+        cursor.remove();
+        if (hasContent) {
+          // Refresh session so it has the opener message
+          currentSession = await api('GET', `/api/sessions/${sessionId}`);
+        }
+      }
+    }
+  }
+}
 
 // --- Title editing ---
 chatTitle.addEventListener('dblclick', () => {
