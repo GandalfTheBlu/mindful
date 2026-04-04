@@ -11,19 +11,27 @@ Summarise only the parts of the following text that are relevant to the given ta
 const MERGE_SYSTEM = `/no_think
 Combine these partial summaries into a single coherent answer for the given task. Be concise.`;
 
-// Splits text into overlapping chunks, summarises each with a task-relevance lens,
-// then merges into a final answer. Returns a string.
-export async function chunkSummarize(text, task) {
+// Splits text into overlapping chunks, optionally filters by keywords,
+// summarises each matching chunk with a task-relevance lens, then merges.
+// keywords: string[] — if provided, only chunks containing at least one keyword are summarised.
+export async function chunkSummarize(text, task, keywords = []) {
   const { chunkSize = 3000, overlapSize = 200 } = config.tools?.readFile ?? {};
 
-  const chunks = [];
+  const allChunks = [];
   for (let i = 0; i < text.length; i += chunkSize - overlapSize) {
-    chunks.push(text.slice(i, i + chunkSize));
+    allChunks.push(text.slice(i, i + chunkSize));
     if (i + chunkSize >= text.length) break;
   }
 
-  if (chunks.length === 0) return 'Content is empty.';
-  log('chunks', chunks.length);
+  if (allChunks.length === 0) return 'Content is empty.';
+
+  const chunks = keywords.length > 0
+    ? allChunks.filter(c => keywords.some(kw => c.toLowerCase().includes(kw.toLowerCase())))
+    : allChunks;
+
+  log('chunks', keywords.length > 0
+    ? `${chunks.length}/${allChunks.length} after keyword filter`
+    : allChunks.length);
 
   const summaries = [];
   for (const chunk of chunks) {

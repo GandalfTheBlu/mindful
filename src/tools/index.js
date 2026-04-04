@@ -11,7 +11,8 @@ export const TOOLS = [
         type: 'object',
         properties: {
           url: { type: 'string', description: 'The full URL to fetch.' },
-          task: { type: 'string', description: 'Optional: what to look for on the page. Used to summarise long pages.' }
+          task: { type: 'string', description: 'Optional: what to look for on the page.' },
+          keywords: { type: 'array', items: { type: 'string' }, description: 'Optional: keywords to filter pages sections by before summarising. Only sections containing at least one keyword will be processed.' }
         },
         required: ['url']
       }
@@ -26,7 +27,8 @@ export const TOOLS = [
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Absolute path to the file.' },
-          task: { type: 'string', description: 'What to look for or understand from the file.' }
+          task: { type: 'string', description: 'What to look for or understand from the file.' },
+          keywords: { type: 'array', items: { type: 'string' }, description: 'Optional: keywords to filter file sections by before summarising. Only sections containing at least one keyword will be processed.' }
         },
         required: ['path', 'task']
       }

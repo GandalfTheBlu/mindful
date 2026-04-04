@@ -5,7 +5,7 @@ function log(label, data) {
   console.log(`[${new Date().toISOString()}] [tool:readFile] ${label}`, data ?? '');
 }
 
-export async function readFile({ path, task }) {
+export async function readFile({ path, task, keywords }) {
   log('read', path);
   let text;
   try {
@@ -14,5 +14,5 @@ export async function readFile({ path, task }) {
     return `Error reading file: ${err.message}`;
   }
   if (!text) return 'File is empty.';
-  return await chunkSummarize(text, task);
+  return await chunkSummarize(text, task, keywords ?? []);
 }
