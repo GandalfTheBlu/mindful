@@ -62,16 +62,23 @@
 
 ---
 
-## Phase 4: Memory Types (Episodic, Semantic, Procedural, Goals)
+## ~~Phase 4: Memory Types (Episodic, Semantic, Procedural, Goals)~~ ✓
 
 **Goal:** Replace the flat fact list with typed memories that have different retrieval and injection strategies.
 
-- **Semantic** (current behavior): Timeless facts. Retrieved by similarity to current message. Injected into user message context.
-- **Episodic**: Timestamped events. *"On 2026-03-15, user was stressed about a job interview."* Retrieved by recency or event similarity. Enables *"last time you were in this situation..."* Note: basic date-based querying is already covered by the `[YYYY-MM-DD]` tag embedded in every memory text — this phase adds a distinct episodic type with its own index and richer recency-based retrieval strategy.
-- **Procedural**: Behavioral preferences about the LLM itself. *"User prefers concise answers."* Always injected into the system prompt, not the message.
-- **Goals/intentions**: Forward-looking facts. *"User wants to finish their novel by end of year."* Injected when the topic touches on planning or progress.
-- Each type needs its own metadata schema, injection logic, and potentially its own vector index.
-- Extraction prompt (Phase 3) needs to classify each new memory by type.
+- **Semantic**: Timeless facts. Retrieved by similarity. Injected into user message context as before.
+- **Episodic**: Timestamped events. Retrieved by similarity alongside semantic. Type stored in metadata; recency-based re-ranking is future work.
+- **Procedural**: Behavioral preferences about the LLM. Always fetched via `listByType` and injected into the system prompt on every turn — no similarity threshold, no filter LLM call.
+- **Goal**: Forward-looking intentions. Retrieved by similarity alongside semantic (surfaces when topic is relevant).
+- `type` field stored in metadata; propagated through all consolidation passes (merge/resolve/abstract use source type).
+- Classification: extraction prompt outputs `fact | confidence | type`; 8B model unreliable at distinguishing types so two code-level fallbacks added:
+  - Procedural: keyword match on "responses/answers" + "prefers/wants"
+  - Episodic: temporal markers in the user message ("last month", "X ago", "recently") + past-tense verb in extracted fact
+
+**Observed limitations:**
+- Goal type is classified correctly by the model when stated clearly ("I want to…") but mislabeled as semantic when phrased indirectly. Functionally harmless — goals surface by similarity regardless of type label.
+- Episodic recency-based retrieval not yet implemented — episodic memories retrieve identically to semantic. The `[YYYY-MM-DD HH:MM:SS]` timestamp in the text lets the LLM reason about recency already.
+- No separate vector index per type — all types share one index per user. Simple enough for current memory counts; worth revisiting if procedural/goal lists grow large.
 
 ---
 
