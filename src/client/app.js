@@ -275,5 +275,66 @@ document.getElementById('btn-wipe-memory').addEventListener('click', async () =>
   await api('DELETE', '/api/memories');
 });
 
+// --- Memory search ---
+const memoryModal = document.getElementById('memory-search-modal');
+const memorySearchInput = document.getElementById('memory-search-input');
+const memorySearchLimit = document.getElementById('memory-search-limit');
+const memorySearchResults = document.getElementById('memory-search-results');
+
+document.getElementById('btn-search-memory').addEventListener('click', () => {
+  memoryModal.hidden = false;
+  memorySearchInput.focus();
+});
+
+document.getElementById('btn-close-search').addEventListener('click', () => {
+  memoryModal.hidden = true;
+});
+
+memoryModal.addEventListener('click', e => {
+  if (e.target === memoryModal) memoryModal.hidden = true;
+});
+
+memoryModal.addEventListener('keydown', e => {
+  if (e.key === 'Escape') memoryModal.hidden = true;
+});
+
+document.getElementById('btn-run-search').addEventListener('click', runMemorySearch);
+memorySearchInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') runMemorySearch();
+});
+
+async function runMemorySearch() {
+  const query = memorySearchInput.value.trim();
+  if (!query) return;
+
+  const limit = Math.min(Math.max(parseInt(memorySearchLimit.value) || 10, 1), 100);
+  memorySearchResults.innerHTML = '<div class="memory-search-empty">Searching…</div>';
+
+  const results = await api('POST', '/api/memories/search', { query, limit });
+
+  if (!Array.isArray(results) || results.length === 0) {
+    memorySearchResults.innerHTML = '<div class="memory-search-empty">No results.</div>';
+    return;
+  }
+
+  memorySearchResults.innerHTML = '';
+  for (const r of results) {
+    const row = document.createElement('div');
+    row.className = 'memory-result';
+
+    const score = document.createElement('span');
+    score.className = 'memory-score';
+    score.textContent = `${Math.round(r.score * 100)}%`;
+
+    const text = document.createElement('span');
+    text.className = 'memory-text';
+    text.textContent = r.text;
+
+    row.appendChild(score);
+    row.appendChild(text);
+    memorySearchResults.appendChild(row);
+  }
+}
+
 // --- Init ---
 loadSessionList();

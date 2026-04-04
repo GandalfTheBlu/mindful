@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { init as initVectra, wipeMemories } from '../core/vectraStore.js';
+import { init as initVectra, wipeMemories, searchMemories } from '../core/vectraStore.js';
 import {
   ensureDataDir, listSessions, getSession,
   saveSession, deleteSession, createSession
@@ -69,6 +69,14 @@ app.delete('/api/sessions/:id', (req, res) => {
 app.delete('/api/memories', async (req, res) => {
   await wipeMemories();
   res.json({ ok: true });
+});
+
+app.post('/api/memories/search', async (req, res) => {
+  const { query, limit } = req.body;
+  if (!query?.trim()) return res.status(400).json({ error: 'Empty query' });
+  const topK = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
+  const results = await searchMemories(query.trim(), topK);
+  res.json(results);
 });
 
 // --- Chat route (SSE) ---
