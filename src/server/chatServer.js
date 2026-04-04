@@ -12,6 +12,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { init as initVectra, wipeMemories, searchMemories } from '../core/vectraStore.js';
+import { getTokenStatus, startReauthFlow } from '../core/googleAuth.js';
 import {
   ensureDataDir, listSessions, listUsers, getSession,
   saveSession, deleteSession, deleteUserSessions, createSession
@@ -110,6 +111,33 @@ app.post('/api/memories/search', async (req, res) => {
   const topK = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
   const results = await searchMemories(userId, query.trim(), topK);
   res.json(results);
+});
+
+// --- Google auth routes ---
+let pendingReauth = null;
+
+app.get('/api/google/auth-status', (req, res) => {
+  res.json(getTokenStatus());
+});
+
+app.post('/api/google/reauth', (req, res) => {
+  if (pendingReauth) return res.json({ url: pendingReauth.url });
+  const { url, promise } = startReauthFlow();
+  pendingReauth = { url, promise };
+  promise.finally(() => { pendingReauth = null; });
+  res.json({ url });
+});
+
+app.get('/api/google/reauth/wait', (req, res) => {
+  if (!pendingReauth) return res.json({ done: true });
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  const send = obj => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  pendingReauth.promise
+    .then(() => { send({ type: 'done' }); res.end(); })
+    .catch(err => { send({ type: 'error', message: err.message }); res.end(); });
 });
 
 // --- Session opener route (SSE) ---

@@ -454,6 +454,53 @@ async function runMemorySearch() {
   }
 }
 
+// --- Google auth banner ---
+const googleAuthBanner = document.getElementById('google-auth-banner');
+const googleAuthMsg = document.getElementById('google-auth-msg');
+const btnGoogleReauth = document.getElementById('btn-google-reauth');
+
+async function checkGoogleAuthStatus() {
+  try {
+    const status = await api('GET', '/api/google/auth-status');
+    if (!status.valid) {
+      googleAuthBanner.hidden = false;
+      googleAuthMsg.textContent = 'Google auth expired';
+      btnGoogleReauth.disabled = false;
+      btnGoogleReauth.textContent = 'Re-authenticate';
+    } else {
+      googleAuthBanner.hidden = true;
+    }
+  } catch { /* no google config — ignore */ }
+}
+
+btnGoogleReauth.addEventListener('click', async () => {
+  btnGoogleReauth.disabled = true;
+  btnGoogleReauth.textContent = 'Waiting…';
+
+  const { url } = await api('POST', '/api/google/reauth');
+  window.open(url, '_blank');
+
+  const es = new EventSource('/api/google/reauth/wait');
+  es.onmessage = e => {
+    const event = JSON.parse(e.data);
+    es.close();
+    if (event.type === 'done') {
+      googleAuthBanner.hidden = true;
+    } else {
+      googleAuthMsg.textContent = 'Re-auth failed — try again';
+      btnGoogleReauth.disabled = false;
+      btnGoogleReauth.textContent = 'Re-authenticate';
+    }
+  };
+  es.onerror = () => {
+    es.close();
+    googleAuthMsg.textContent = 'Re-auth failed — try again';
+    btnGoogleReauth.disabled = false;
+    btnGoogleReauth.textContent = 'Re-authenticate';
+  };
+});
+
 // --- Init ---
 renderUserDisplay();
 loadSessionList();
+checkGoogleAuthStatus();

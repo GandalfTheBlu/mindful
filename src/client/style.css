@@ -177,6 +177,26 @@ body {
 }
 #btn-wipe-memory:hover { background: #2a1515; color: #e05555; }
 
+#google-auth-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #2a1f0a;
+  border: 1px solid #5a3e10;
+  border-radius: 4px;
+  font-size: 11px;
+}
+#google-auth-msg { flex: 1; color: #c8922a; }
+#google-auth-banner button {
+  width: auto;
+  font-size: 11px;
+  padding: 2px 8px;
+  color: #c8922a;
+  border-color: #5a3e10;
+}
+#google-auth-banner button:hover { background: #3a2a0a; }
+
 /* Main chat */
 #chat-area {
   flex: 1;
