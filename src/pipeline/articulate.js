@@ -92,6 +92,13 @@ function formatToolStatus(name, argsStr) {
       case 'create_directory': return `Creating: ${args.path}`;
       case 'get_calendar_events': return 'Fetching calendar...';
       case 'search_mail':   return `Searching mail: ${args.query}`;
+      case 'list_tasks':    return 'Fetching tasks...';
+      case 'create_task':   return `Creating task: ${args.title}`;
+      case 'complete_task': return 'Completing task...';
+      case 'get_weather':   return 'Checking weather...';
+      case 'get_recently_played': return 'Checking Spotify...';
+      case 'get_top_artists': return 'Fetching top artists...';
+      case 'get_currently_playing': return 'Checking Spotify...';
       default:              return `Tool: ${name}`;
     }
   } catch { return `Tool: ${name}`; }

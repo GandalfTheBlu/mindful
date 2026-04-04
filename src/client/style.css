@@ -184,6 +184,26 @@ body {
 }
 #btn-wipe-memory:hover { background: #2a1515; color: #e05555; }
 
+#spotify-auth-banner:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #0a2010;
+  border: 1px solid #1a5a30;
+  border-radius: 4px;
+  font-size: 11px;
+}
+#spotify-auth-msg { flex: 1; color: #3db862; }
+#spotify-auth-banner button {
+  width: auto;
+  font-size: 11px;
+  padding: 2px 8px;
+  color: #3db862;
+  border-color: #1a5a30;
+}
+#spotify-auth-banner button:hover { background: #0f3020; }
+
 #google-auth-banner:not([hidden]) {
   display: flex;
   align-items: center;

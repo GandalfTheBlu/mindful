@@ -45,6 +45,11 @@
     "binary": "C:\\piper\\piper.exe",
     "model": "C:\\piper\\voices\\en_US-lessac-medium.onnx"
   },
+  "spotify": {
+    "credentialsFile": "C:\\spotify\\secret.json",
+    "tokenFile": "C:\\spotify\\token.json",
+    "redirectUri": "http://127.0.0.1:3001/callback"
+  },
   "google": {
     "credentialsFile": "C:\\google\\client_secret_1065460542653-n2r31ig08gaku465jgp690vac7gnbr7t.apps.googleusercontent.com.json",
     "tokenFile": "C:\\google\\token.json"
@@ -53,6 +58,7 @@
     "webSearch": { "maxResults": 5, "jinaApiKeyFile": "C:\\jina\\apikey.txt" },
     "webFetch": { "maxChars": 12000 },
     "readFile": { "chunkSize": 3000, "overlapSize": 200 },
-    "fileSystem": { "allowedRoot": "C:\\mind\\workspace" }
+    "fileSystem": { "allowedRoot": "C:\\mind\\workspace" },
+    "weather": { "lat": 58.41, "lon": 15.62 }
   }
 }

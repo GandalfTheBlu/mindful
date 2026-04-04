@@ -289,3 +289,95 @@ The client renders these as a transient activity strip above the streaming respo
 - Consolidation running
 
 This is also useful for debugging — gives the same signal as watching server logs but in the UI.
+
+---
+
+## Phase 13: Episodic Re-ranking
+
+**Goal:** Make episodic memory retrieval time-aware, so recent events rank higher than old ones when both are semantically similar.
+
+### Approach
+
+After cosine similarity scoring, apply a recency multiplier to episodic memories only:
+
+```
+adjusted_score = cosine_score * recency_weight(createdAt)
+recency_weight = 0.5 + 0.5 * exp(-decay * age_in_days)
+```
+
+A configurable `decay` constant (e.g. 0.05) gives a half-life of ~14 days — a memory from yesterday scores nearly full weight, one from 6 months ago scores ~50%. Semantic/procedural/goal memories are unaffected (timeless facts shouldn't decay).
+
+Apply the multiplier in `queryMemories` after fetching raw results, before sorting and slicing to `topK`.
+
+Config addition: `memory.episodicDecay` (default 0.05).
+
+---
+
+## Phase 14: Memory & User Model Editing
+
+**Goal:** Let the user correct, delete, or edit individual memories and the user model portrait directly from the UI — so bad extractions don't persist until consolidation resolves them.
+
+### Memory editing (search modal)
+
+- Add edit (✎) and delete (✕) buttons to each search result row
+- **Delete:** `DELETE /api/memories/:id` — removes the item from the vector index by ID
+- **Edit:** inline text edit; on save, calls `PUT /api/memories/:id` with new text — re-embeds and replaces the item, preserving metadata (confidence, type, dates)
+- IDs must be returned alongside each search result (already available from vectra)
+
+### User model editing (user model modal)
+
+- Make the text in the user model modal editable (contenteditable or textarea toggle)
+- Save button calls `PUT /api/usermodel?userId=` — writes the edited text directly to the `usermodel-{userId}.txt` file
+- Useful when synthesis produces a wrong inference or misses important context
+
+---
+
+## Phase 15: Additional Tool Integrations
+
+**Goal:** Extend the model's real-world reach with low-friction tools that follow the same pattern as calendar and mail.
+
+### Weather — `get_weather` (zero friction)
+
+- API: `open-meteo.com` — free, no key, no account
+- Parameters: `{ lat, lon, days }` — returns current conditions + N-day forecast as structured text
+- Config: `tools.weather.lat`, `tools.weather.lon` (set once, matches user's location)
+- Utility: daily briefings, event planning, "should I ride my bike today?" decisions
+- Implementation: one fetch call, ~30 lines
+
+### Spotify — `get_recently_played`, `get_top_artists`, `get_currently_playing`
+
+- Auth: Authorization Code OAuth flow — same pattern as Google. One-time browser consent. Requires a free Spotify Developer app (client ID + secret).
+- Scopes: `user-read-recently-played`, `user-top-read`, `user-read-currently-playing` (all read-only)
+- Tools:
+  - `get_recently_played({ limit })` — last N tracks with timestamps
+  - `get_top_artists({ timeRange })` — short (4 weeks) / medium (6 months) / long-term taste profile
+  - `get_currently_playing` — active track, artist, progress
+- Utility: listening history as mood/energy context in briefings ("you've been on a lot of heavy metal this week"); top artists are genuinely personal facts worth storing in the user model; "what should I listen to while working on X?" becomes answerable
+- Implementation: same fetch + token refresh pattern as Google auth (~same file size as googleCalendar.js)
+
+### Google Tasks — `list_tasks`, `create_task` (already authenticated)
+
+- Auth: same OAuth token already in place — just add `tasks` to the scope list
+- Provides the user's actual to-do lists, complementing the goal memory type
+- Read + write: model can create tasks when the user asks it to, or surface overdue ones in briefings
+- Utility: closes the loop between "I want to do X" (goal memory) and actual task management
+
+### Ranking
+
+1. **Weather** — zero setup, immediate briefing value
+2. **Google Tasks** — already authenticated (just add scope), closes the loop between goal memories and real task management
+3. **Spotify** — one-time OAuth setup, adds mood/listening context to briefings and user model
+
+### Briefing integration
+
+Once these tools are available, the briefing pipeline should use all of them together for richer daily context:
+
+1. Weather for the week (`get_weather`)
+2. Calendar events (`get_calendar_events`)
+3. Important mail (`search_mail`)
+4. Open/overdue tasks (`list_tasks`)
+5. Active goals from memory
+6. Recent listening as mood signal (`get_recently_played` — optional, if Spotify configured)
+7. User model for context
+
+The LLM synthesis call should surface connections across all sources: a calendar event + related task + relevant weather in one note; a goal with an overdue task blocking it; etc.

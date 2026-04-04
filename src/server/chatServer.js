@@ -14,6 +14,7 @@ import { fileURLToPath } from 'url';
 import { init as initVectra, wipeMemories, searchMemories } from '../core/vectraStore.js';
 import { wipeUserModel, getUserModel } from '../core/userModel.js';
 import { getTokenStatus, startReauthFlow } from '../core/googleAuth.js';
+import { getTokenStatus as getSpotifyTokenStatus, startReauthFlow as startSpotifyReauthFlow } from '../core/spotifyAuth.js';
 import { synthesize, isTTSConfigured } from '../tts.js';
 import {
   ensureDataDir, listSessions, listUsers, getSession,
@@ -165,6 +166,33 @@ app.get('/api/google/reauth/wait', (req, res) => {
   res.flushHeaders();
   const send = obj => res.write(`data: ${JSON.stringify(obj)}\n\n`);
   pendingReauth.promise
+    .then(() => { send({ type: 'done' }); res.end(); })
+    .catch(err => { send({ type: 'error', message: err.message }); res.end(); });
+});
+
+// --- Spotify auth routes ---
+let pendingSpotifyReauth = null;
+
+app.get('/api/spotify/auth-status', (req, res) => {
+  res.json(getSpotifyTokenStatus());
+});
+
+app.post('/api/spotify/reauth', (req, res) => {
+  if (pendingSpotifyReauth) return res.json({ url: pendingSpotifyReauth.url });
+  const { url, promise } = startSpotifyReauthFlow();
+  pendingSpotifyReauth = { url, promise };
+  promise.finally(() => { pendingSpotifyReauth = null; });
+  res.json({ url });
+});
+
+app.get('/api/spotify/reauth/wait', (req, res) => {
+  if (!pendingSpotifyReauth) return res.json({ done: true });
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  const send = obj => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+  pendingSpotifyReauth.promise
     .then(() => { send({ type: 'done' }); res.end(); })
     .catch(err => { send({ type: 'error', message: err.message }); res.end(); });
 });

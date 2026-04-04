@@ -780,6 +780,50 @@ async function speakText(text, messageDiv) {
   tts.flush();
 }
 
+// --- Spotify auth banner ---
+const spotifyAuthBanner = document.getElementById('spotify-auth-banner');
+const spotifyAuthMsg = document.getElementById('spotify-auth-msg');
+const btnSpotifyReauth = document.getElementById('btn-spotify-reauth');
+
+async function checkSpotifyAuthStatus() {
+  try {
+    const status = await api('GET', '/api/spotify/auth-status');
+    spotifyAuthBanner.hidden = status.valid;
+    if (!status.valid) {
+      spotifyAuthMsg.textContent = 'Spotify not connected';
+      btnSpotifyReauth.disabled = false;
+      btnSpotifyReauth.textContent = 'Connect';
+    }
+  } catch { spotifyAuthBanner.hidden = true; }
+}
+
+btnSpotifyReauth.addEventListener('click', async () => {
+  btnSpotifyReauth.disabled = true;
+  btnSpotifyReauth.textContent = 'Waiting…';
+
+  const { url } = await api('POST', '/api/spotify/reauth');
+  window.open(url, '_blank');
+
+  const es = new EventSource('/api/spotify/reauth/wait');
+  es.onmessage = e => {
+    const event = JSON.parse(e.data);
+    es.close();
+    if (event.type === 'done') {
+      spotifyAuthBanner.hidden = true;
+    } else {
+      spotifyAuthMsg.textContent = 'Auth failed — try again';
+      btnSpotifyReauth.disabled = false;
+      btnSpotifyReauth.textContent = 'Connect';
+    }
+  };
+  es.onerror = () => {
+    es.close();
+    spotifyAuthMsg.textContent = 'Auth failed — try again';
+    btnSpotifyReauth.disabled = false;
+    btnSpotifyReauth.textContent = 'Connect';
+  };
+});
+
 // --- Google auth banner ---
 const googleAuthBanner = document.getElementById('google-auth-banner');
 const googleAuthMsg = document.getElementById('google-auth-msg');
@@ -830,4 +874,5 @@ btnGoogleReauth.addEventListener('click', async () => {
 renderUserDisplay();
 loadSessionList();
 checkGoogleAuthStatus();
+checkSpotifyAuthStatus();
 updateTtsButton();
