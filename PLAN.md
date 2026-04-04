@@ -82,7 +82,7 @@
 
 ---
 
-## Phase 5: Tool Use — Web Search & File Reading
+## ~~Phase 5: Tool Use — Web Search & File Reading~~ ✓
 
 **Goal:** Give the LLM agency to actively gather information beyond the conversation: fetch a web page by URL, or read and summarise a local file. Both are implemented as standard tool calls so the model decides when to use them.
 
@@ -136,3 +136,5 @@ Changes:
   "readFile": { "chunkSize": 3000, "overlapSize": 200 }
 }
 ```
+
+**Implementation note:** Tool calls handled inline in the streaming response rather than a separate non-streaming pre-pass. `streamOrToolCalls` in `llm.js` accumulates `delta.tool_calls` fragments during streaming; on completion with `finish_reason: tool_calls`, executes tools and starts a new streaming pass. No extra LLM call on turns where no tools are used.
