@@ -207,3 +207,75 @@ A background job (triggered at session end or on a schedule) scans active goals 
 The session opener checks for recent research findings and includes them if present: *"While you were away, I looked into X and found..."*
 
 This closes the loop between goal tracking (Phase 6) and tool use (Phase 5) — goals drive autonomous research, research feeds back into the conversation.
+
+---
+
+## Phase 10: Calendar & Mail Integration
+
+**Goal:** Give the model read access to the user's real-world schedule and inbox so it can reason about upcoming events, deadlines, and relevant messages without the user having to relay them manually.
+
+### Calendar
+
+Google Calendar API (REST, OAuth2). Scopes: `calendar.readonly` or the narrower `calendar.events.readonly`. Provides: event list, free/busy, recurring events. Practical as a tool call — `get_calendar_events({ days: 7 })` returns upcoming events as structured text. Useful for proactive research (Phase 9) and session openers.
+
+### Mail
+
+Google Gmail API (REST, OAuth2). Read-only scope: `gmail.readonly`. Returns message list, subjects, snippets, full body. For personal/local use, OAuth credentials from Google Cloud Console work without app verification — no public deployment required. Implement as a tool: `search_mail({ query: 'from:...' })` following Gmail's search syntax. Return subject + snippet, not full body by default (token cost).
+
+### Auth
+
+Both APIs use the same OAuth2 flow. Store refresh token locally (outside repo). A one-time browser-based consent flow (`gcloud`-style) generates the token. All subsequent calls use the refresh token silently.
+
+### Privacy note
+
+Mail content never leaves the local machine — it goes LLM → local llama-server only. The OAuth token should be stored in a path referenced by config, not committed.
+
+---
+
+## Phase 11: Text-to-Speech & Sound Wave Visualisation
+
+**Goal:** Let the model speak responses aloud using a locally-run TTS engine, with a live waveform visualised in the client while audio plays.
+
+### TTS engine
+
+Run locally — options include `piper` (fast, good quality, GGUF-adjacent ecosystem) or `kokoro` (higher quality, more resource-intensive). Output: WAV/PCM streamed or written to a temp file. The server plays or streams audio; the client visualises it.
+
+### Server side
+
+After articulation, pipe the response text to the TTS process. Stream PCM audio back to the client over a dedicated SSE or WebSocket channel, or serve it as a streamable audio endpoint.
+
+### Client side
+
+Use the Web Audio API: decode the incoming PCM stream into an `AudioBuffer`, play via `AudioContext`, and feed the analyser node to a `<canvas>` waveform renderer. The waveform animates in real time as audio plays — a visualisation of the model "speaking."
+
+### Config
+
+TTS is opt-in — a toggle in the UI and a `tts.enabled` flag in config. Binary path and model path follow the same pattern as the LLM config.
+
+---
+
+## Phase 12: Server Activity Visualisation
+
+**Goal:** Make the client show what the server is actually doing between the user sending a message and the response appearing — retrieval, recognition, tool calls, extraction — so the system feels transparent and alive rather than a black box.
+
+### Approach
+
+Emit structured status events over the existing SSE chat stream alongside `chunk` and `done` events. Each pipeline phase broadcasts a `status` event:
+
+```json
+{ "type": "status", "phase": "retrieve", "detail": "searching memories..." }
+{ "type": "status", "phase": "tool_call", "detail": "web_search: best hiking trails Stockholm" }
+{ "type": "status", "phase": "extract", "detail": "storing 2 memories" }
+```
+
+The client renders these as a transient activity strip above the streaming response bubble — phases appear and fade as they complete, tool calls show the tool name and query. Nothing is permanently added to the chat history; it's ephemeral UI feedback only.
+
+### What gets surfaced
+
+- Memory retrieval (how many candidates, how many injected)
+- Pattern recognition firing (recurrence / emotional / stale goal)
+- Each tool call: name + key argument (query, url, path)
+- Memory extraction results (how many stored)
+- Consolidation running
+
+This is also useful for debugging — gives the same signal as watching server logs but in the UI.
