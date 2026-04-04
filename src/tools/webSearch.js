@@ -16,8 +16,12 @@ export async function webSearch({ query }) {
     throw new Error(`webSearch: could not read API key from ${keyFile}`);
   }
   if (!apiKey) throw new Error(`webSearch: API key file ${keyFile} is empty`);
+
   const url = `https://s.jina.ai/${encodeURIComponent(query)}`;
   log('query', query);
+  log('request', `GET ${url} (maxResults: ${maxResults})`);
+
+  const t0 = Date.now();
   const res = await fetch(url, {
     headers: {
       Accept: 'text/plain',
@@ -25,8 +29,11 @@ export async function webSearch({ query }) {
       'X-With-Links-Summary': String(maxResults)
     }
   });
+  log('response', `${res.status} ${res.statusText} (${Date.now() - t0}ms)`);
   if (!res.ok) throw new Error(`webSearch failed: ${res.status} ${res.statusText}`);
+
   const text = await res.text();
+  log('raw', `${text.length} chars received`);
 
   // Parse into compact result list: title, URL, short description
   const results = [];
@@ -38,8 +45,13 @@ export async function webSearch({ query }) {
     if (title && url) results.push({ title, url, desc: desc || '' });
   }
 
-  log('done', `${results.length} results`);
-  if (results.length === 0) return text.slice(0, 2000); // fallback
+  if (results.length === 0) {
+    log('parse', 'no structured results found, returning raw (truncated)');
+    return text.slice(0, 2000);
+  }
+
+  log('results', `${results.length} parsed:`);
+  results.forEach((r, i) => log(`  [${i + 1}]`, `${r.title} — ${r.url}`));
 
   return results
     .map((r, i) => `[${i + 1}] ${r.title}\n    ${r.url}\n    ${r.desc}`)

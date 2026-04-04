@@ -104,6 +104,8 @@ export async function articulate(session, onChunk, observations = [], procedural
 
   let currentMessages = [{ role: 'system', content: systemContent }, ...llmMessages];
   let responseContent = '';
+  const maxToolIterations = 10;
+  let toolIterations = 0;
 
   while (true) {
     const filter = makeThinkFilter(onChunk);
@@ -111,6 +113,11 @@ export async function articulate(session, onChunk, observations = [], procedural
     responseContent = filter.flush();
 
     if (!toolCalls) break;
+
+    if (++toolIterations > maxToolIterations) {
+      log('tool-loop-limit', `reached ${maxToolIterations} tool iterations, stopping`);
+      break;
+    }
 
     log('tool-calls', toolCalls.map(tc => tc.name).join(', '));
 
