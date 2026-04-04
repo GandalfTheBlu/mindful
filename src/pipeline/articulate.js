@@ -107,6 +107,10 @@ export async function articulate(session, onChunk, observations = [], procedural
   const maxToolIterations = 10;
   let toolIterations = 0;
 
+  // Turn-local context passed to every tool call.
+  // listedDirs resets each turn; fileCache persists in session across turns.
+  const toolContext = { listedDirs: new Set(), session };
+
   while (true) {
     const filter = makeThinkFilter(onChunk);
     const { toolCalls } = await streamOrToolCalls(currentMessages, TOOLS, chunk => filter.processChunk(chunk));
@@ -137,7 +141,7 @@ export async function articulate(session, onChunk, observations = [], procedural
     for (const tc of toolCalls) {
       let result;
       try {
-        result = await callTool(tc.name, JSON.parse(tc.arguments));
+        result = await callTool(tc.name, JSON.parse(tc.arguments), toolContext);
       } catch (err) {
         result = `Error: ${err.message}`;
       }
