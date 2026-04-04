@@ -1,4 +1,5 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
 
 :root {
   --bg: #0f0f0f;
@@ -177,7 +178,7 @@ body {
 }
 #btn-wipe-memory:hover { background: #2a1515; color: #e05555; }
 
-#google-auth-banner {
+#google-auth-banner:not([hidden]) {
   display: flex;
   align-items: center;
   gap: 6px;
