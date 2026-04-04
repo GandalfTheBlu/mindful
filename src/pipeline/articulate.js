@@ -1,4 +1,5 @@
-import { stream } from '../llm.js';
+import { streamOrToolCalls } from '../llm.js';
+import { TOOLS, callTool } from '../tools/index.js';
 import { ContextWindow } from '../context/ContextWindow.js';
 import { summarize } from '../core/summarizer.js';
 import config from '../config.js';
@@ -93,8 +94,6 @@ export async function articulate(session, onChunk, observations = [], procedural
     content: m.llmContent ?? m.content
   }));
 
-  const filter = makeThinkFilter(onChunk);
-
   let systemContent = SYSTEM;
   if (procedural.length > 0) {
     systemContent += `\n\n[User preferences for your responses]\n${procedural.join('\n')}`;
@@ -103,10 +102,42 @@ export async function articulate(session, onChunk, observations = [], procedural
     systemContent += `\n\n[Observations about the user - use only if directly relevant to the conversation]\n${observations.join('\n')}`;
   }
 
-  await stream(
-    [{ role: 'system', content: systemContent }, ...llmMessages],
-    chunk => filter.processChunk(chunk)
-  );
+  let currentMessages = [{ role: 'system', content: systemContent }, ...llmMessages];
+  let responseContent = '';
 
-  return filter.flush();
+  while (true) {
+    const filter = makeThinkFilter(onChunk);
+    const { toolCalls } = await streamOrToolCalls(currentMessages, TOOLS, chunk => filter.processChunk(chunk));
+    responseContent = filter.flush();
+
+    if (!toolCalls) break;
+
+    log('tool-calls', toolCalls.map(tc => tc.name).join(', '));
+
+    currentMessages = [
+      ...currentMessages,
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: toolCalls.map(tc => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: tc.arguments }
+        }))
+      }
+    ];
+
+    for (const tc of toolCalls) {
+      let result;
+      try {
+        result = await callTool(tc.name, JSON.parse(tc.arguments));
+      } catch (err) {
+        result = `Error: ${err.message}`;
+      }
+      log('tool-result', `${tc.name} → ${String(result).slice(0, 120)}`);
+      currentMessages.push({ role: 'tool', content: String(result), tool_call_id: tc.id });
+    }
+  }
+
+  return responseContent;
 }

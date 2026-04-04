@@ -5,7 +5,10 @@
       "mcp__mindful__get_logs",
       "mcp__mindful__chat",
       "mcp__mindful__search_memories",
-      "mcp__mindful__wipe_memories"
+      "mcp__mindful__wipe_memories",
+      "Bash(powershell.exe:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)"
     ]
   }
 }
