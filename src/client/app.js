@@ -579,12 +579,14 @@ async function speakText(text, messageDiv) {
   source.connect(analyser);
   analyser.connect(ctx.destination);
 
-  // Attach waveform canvas to the message
+  // Attach waveform canvas inside the bubble so it inherits its width
+  const bubble = messageDiv.querySelector('.message-bubble');
   const canvas = document.createElement('canvas');
   canvas.className = 'waveform';
-  canvas.width = 400;
   canvas.height = 40;
-  messageDiv.appendChild(canvas);
+  bubble.appendChild(canvas);
+  // Match canvas internal resolution to its rendered width
+  canvas.width = canvas.offsetWidth || bubble.offsetWidth || 400;
   scrollToBottom();
 
   const canvasCtx = canvas.getContext('2d');
@@ -593,6 +595,8 @@ async function speakText(text, messageDiv) {
 
   function drawWaveform() {
     animId = requestAnimationFrame(drawWaveform);
+    // Keep canvas resolution in sync if bubble is resized
+    if (canvas.offsetWidth !== canvas.width) canvas.width = canvas.offsetWidth;
     analyser.getByteTimeDomainData(dataArray);
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
     canvasCtx.strokeStyle = '#6a9fb5';
