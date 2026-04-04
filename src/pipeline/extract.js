@@ -37,13 +37,13 @@ export async function extract(userContent, precedingMessages) {
     return [];
   }
 
-  const facts = response.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  log('result', facts);
+  const lines = response.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const fact = lines[0];
+  if (!fact) return [];
 
-  for (const fact of facts) {
-    await addMemory(fact);
-    log('stored', fact);
-  }
+  log('result', fact);
+  await addMemory(fact);
+  log('stored', fact);
 
-  return facts;
+  return [fact];
 }
