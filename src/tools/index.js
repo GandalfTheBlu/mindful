@@ -2,6 +2,8 @@ import { webFetch } from './webFetch.js';
 import { webSearch } from './webSearch.js';
 import { readFile } from './readFile.js';
 import { listDirectory, writeFile, createDirectory } from './fileSystem.js';
+import { getCalendarEvents } from './googleCalendar.js';
+import { searchMail } from './googleMail.js';
 
 export const TOOLS = [
   {
@@ -92,6 +94,36 @@ export const TOOLS = [
         required: ['path']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_calendar_events',
+      description: "Fetch upcoming events from the user's Google Calendar.",
+      parameters: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', description: 'How many days ahead to look (default 7).' },
+          maxResults: { type: 'number', description: 'Maximum number of events to return (default 20).' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_mail',
+      description: "Search the user's Gmail using Gmail search syntax (e.g. 'from:someone@example.com', 'subject:invoice', 'is:unread'). Returns subject, sender, date, and a short snippet per message.",
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Gmail search query.' },
+          maxResults: { type: 'number', description: 'Maximum number of messages to return (default 10).' },
+          includeBody: { type: 'boolean', description: 'If true, include the full plain-text body. Default false (snippet only).' }
+        },
+        required: ['query']
+      }
+    }
   }
 ];
 
@@ -102,5 +134,7 @@ export async function callTool(name, args, context = {}) {
   if (name === 'list_directory') return String(await listDirectory(args, context));
   if (name === 'write_file') return String(await writeFile(args, context));
   if (name === 'create_directory') return String(await createDirectory(args, context));
+  if (name === 'get_calendar_events') return String(await getCalendarEvents(args));
+  if (name === 'search_mail') return String(await searchMail(args));
   throw new Error(`Unknown tool: ${name}`);
 }

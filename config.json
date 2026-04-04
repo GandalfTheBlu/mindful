@@ -41,6 +41,10 @@
     "charsPerToken": 4,
     "summarizeAtPercent": 0.65
   },
+  "google": {
+    "credentialsFile": "C:\\google\\client_secret_1065460542653-n2r31ig08gaku465jgp690vac7gnbr7t.apps.googleusercontent.com.json",
+    "tokenFile": "C:\\google\\token.json"
+  },
   "tools": {
     "webSearch": { "maxResults": 5, "jinaApiKeyFile": "C:\\jina\\apikey.txt" },
     "webFetch": { "maxChars": 12000 },
