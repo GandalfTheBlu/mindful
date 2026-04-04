@@ -6,11 +6,12 @@ export const TOOLS = [
     type: 'function',
     function: {
       name: 'web_fetch',
-      description: 'Fetch the text content of a web page by URL.',
+      description: 'Fetch the text content of a web page by URL. For long pages, provide a task to focus the summary.',
       parameters: {
         type: 'object',
         properties: {
-          url: { type: 'string', description: 'The full URL to fetch.' }
+          url: { type: 'string', description: 'The full URL to fetch.' },
+          task: { type: 'string', description: 'Optional: what to look for on the page. Used to summarise long pages.' }
         },
         required: ['url']
       }
