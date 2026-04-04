@@ -28,6 +28,11 @@
     "minMemoriesForLLMPasses": 5,
     "maxMemoriesForContradictionCheck": 40
   },
+  "confidence": {
+    "boostOnAccess": 0.05,
+    "uncertainThreshold": 0.5,
+    "fastDecayAgeDays": 3
+  },
   "contextHorizon": {
     "charsPerToken": 4,
     "summarizeAtPercent": 0.65

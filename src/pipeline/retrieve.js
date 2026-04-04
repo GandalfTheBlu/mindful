@@ -26,6 +26,8 @@ You are given a conversation context and numbered candidate memories. Output ONL
 export async function retrieve(session, userContent) {
   const { retrievalWindowChars, maxInjectedMemories } = config.memory;
 
+  const { uncertainThreshold } = config.confidence ?? { uncertainThreshold: 0.5 };
+
   // Build deduplication set from memories already explicitly injected into context
   const alreadyInContext = new Set(
     session.messages.flatMap(m => m.injectedMemories ?? [])
@@ -48,7 +50,7 @@ export async function retrieve(session, userContent) {
     log('candidates', candidates.length > 0 ? candidates : '(none)');
 
     if (candidates.length > 0) {
-      const numbered = candidates.map((m, i) => `${i + 1}. ${m}`).join('\n');
+      const numbered = candidates.map((c, i) => `${i + 1}. ${c.text}`).join('\n');
       const response = await complete(
         [
           { role: 'system', content: FILTER_SYSTEM },
@@ -62,11 +64,16 @@ export async function retrieve(session, userContent) {
         .map(n => parseInt(n) - 1)
         .filter(i => i >= 0 && i < candidates.length);
 
-      injected = indices.map(i => candidates[i]).filter(m => !alreadyInContext.has(m));
+      injected = indices.map(i => candidates[i]).filter(c => !alreadyInContext.has(c.text));
     }
   }
 
-  log('injected', injected.length > 0 ? injected : '(none)');
+  const injectedTexts = injected.map(c => c.text);
+  const injectedFormatted = injected.map(c =>
+    c.confidence < uncertainThreshold ? `[uncertain] ${c.text}` : c.text
+  );
 
-  return { injected };
+  log('injected', injectedTexts.length > 0 ? injectedTexts : '(none)');
+
+  return { injected: injectedTexts, injectedFormatted };
 }

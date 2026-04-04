@@ -25,11 +25,11 @@ export async function init() {
   // Indexes are created on demand; nothing to pre-initialize.
 }
 
-export async function addMemory(userId, text) {
+export async function addMemory(userId, text, confidence = 1.0) {
   const index = await getIndex(userId);
   const vector = await embed(text);
   const now = Date.now();
-  await index.insertItem({ vector, metadata: { text, createdAt: now, lastAccessed: now, accessCount: 0 } });
+  await index.insertItem({ vector, metadata: { text, createdAt: now, lastAccessed: now, accessCount: 0, confidence } });
 }
 
 export async function queryMemories(userId, text, topK) {
@@ -43,20 +43,22 @@ export async function queryMemories(userId, text, topK) {
     const now = Date.now();
     await index.beginUpdate();
     for (const r of hits) {
+      const current = r.item.metadata.confidence ?? 1.0;
       await index.upsertItem({
         id: r.item.id,
         vector: r.item.vector,
         metadata: {
           ...r.item.metadata,
           lastAccessed: now,
-          accessCount: (r.item.metadata.accessCount ?? 0) + 1
+          accessCount: (r.item.metadata.accessCount ?? 0) + 1,
+          confidence: Math.min(1.0, current + (config.confidence?.boostOnAccess ?? 0.05))
         }
       });
     }
     await index.endUpdate();
   }
 
-  return hits.map(r => r.item.metadata.text);
+  return hits.map(r => ({ text: r.item.metadata.text, confidence: r.item.metadata.confidence ?? 1.0 }));
 }
 
 export async function listAllMemories(userId) {
@@ -79,9 +81,9 @@ export async function deleteItems(userId, ids) {
   await index.endUpdate();
 }
 
-export async function replaceItems(userId, ids, newText) {
+export async function replaceItems(userId, ids, newText, confidence = 1.0) {
   await deleteItems(userId, ids);
-  await addMemory(userId, newText);
+  await addMemory(userId, newText, confidence);
 }
 
 export async function searchMemories(userId, text, topK) {

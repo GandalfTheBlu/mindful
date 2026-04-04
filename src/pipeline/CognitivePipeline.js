@@ -14,10 +14,10 @@ export class CognitivePipeline {
 
     // --- Phase 1: Retrieve ---
     log('phase', 'retrieve');
-    const { injected } = await retrieve(session, userContent);
+    const { injected, injectedFormatted } = await retrieve(session, userContent);
 
-    const llmContent = injected.length > 0
-      ? `${userContent}\n\n[Relevant memories]:\n${injected.join('\n')}`
+    const llmContent = injectedFormatted.length > 0
+      ? `${userContent}\n\n[Relevant memories]:\n${injectedFormatted.join('\n')}`
       : userContent;
 
     const userMsg = {
