@@ -226,6 +226,8 @@ body {
 #chat-title:focus { outline: 1px solid var(--accent); }
 
 #header-actions { display: flex; gap: 8px; }
+#btn-brief { color: #6a9fb5; border-color: #2a4a5a; }
+#btn-brief:hover:not(:disabled) { background: #1a2f3a; }
 
 button {
   background: var(--surface);

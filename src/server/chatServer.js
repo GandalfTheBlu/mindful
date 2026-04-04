@@ -19,6 +19,7 @@ import {
 } from './sessionStore.js';
 import { CognitivePipeline } from '../pipeline/CognitivePipeline.js';
 import { generateOpener } from '../pipeline/opener.js';
+import { runBriefing } from '../pipeline/briefing.js';
 
 const app = express();
 const PORT = 3000;
@@ -182,6 +183,37 @@ app.post('/api/sessions/:id/open', async (req, res) => {
     console.error(err);
     send({ type: 'error', message: err.message });
   } finally {
+    res.end();
+  }
+});
+
+// --- Briefing route (SSE) ---
+app.post('/api/sessions/:id/brief', async (req, res) => {
+  if (busy) return res.status(409).json({ error: 'Busy' });
+
+  const session = loadSession(req.params.id);
+  if (!session) return res.status(404).json({ error: 'Not found' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  function send(obj) { res.write(`data: ${JSON.stringify(obj)}\n\n`); }
+
+  busy = true;
+  try {
+    const content = await runBriefing(session, chunk => send({ type: 'chunk', content: chunk }));
+    if (content) {
+      session.messages.push({ role: 'assistant', content });
+      saveSession(session);
+    }
+    send({ type: 'done', generated: !!content });
+  } catch (err) {
+    console.error(err);
+    send({ type: 'error', message: err.message });
+  } finally {
+    busy = false;
     res.end();
   }
 });

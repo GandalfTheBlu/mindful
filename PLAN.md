@@ -196,21 +196,31 @@ The user model is injected into the system prompt on every turn as a dedicated s
 
 ---
 
-## Phase 9: Proactive Research
+## ~~Phase 9: Proactive Briefing~~ ✓
 
-**Goal:** The system does useful work between sessions, not just during them. When the user has active goals, the system researches them autonomously and surfaces findings at the next session opener.
+**Goal:** Let the user request a daily briefing that synthesizes calendar, email, goals, and user model into a focused summary — surfacing what's relevant, what needs attention, and connections between them.
 
 ### Approach
 
-A background job (triggered at session end or on a schedule) scans active goals and runs web searches for each. Results are summarised and stored as a special `research` memory type with a TTL (e.g. 3 days — research goes stale). 
+A **Briefing button** in the chat header triggers an on-demand pipeline (not automatic — fully user-controlled). When clicked:
 
-The session opener checks for recent research findings and includes them if present: *"While you were away, I looked into X and found..."*
+1. Fetch next 7 days of calendar events via `get_calendar_events`
+2. Fetch recent important mail via `search_mail({ query: 'is:important newer_than:7d' })`
+3. Load active `goal`-type memories + user model for context
+4. Single LLM synthesis call: highlight notable calendar events (especially those connected to goals), surface actionable emails (skip promotions), note connections between events/mail/goals
+5. Stream result as an assistant message, save to session
 
-This closes the loop between goal tracking (Phase 6) and tool use (Phase 5) — goals drive autonomous research, research feeds back into the conversation.
+The button respects the `busy` flag and is disabled when no session is open. Result is saved in session history.
+
+**Deliberate design choices:**
+- On-demand rather than automatic — the user decides when they want a briefing
+- No scheduling complexity — the "once per day" feel is natural since you'd only click it when sitting down
+- Can be re-run mid-day for a refresh
+- Gracefully degrades if Google auth is expired (shows error in briefing text)
 
 ---
 
-## Phase 10: Calendar & Mail Integration
+## ~~Phase 10: Calendar & Mail Integration~~ ✓
 
 **Goal:** Give the model read access to the user's real-world schedule and inbox so it can reason about upcoming events, deadlines, and relevant messages without the user having to relay them manually.
 

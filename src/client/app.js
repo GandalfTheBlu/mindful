@@ -14,6 +14,7 @@ const form = document.getElementById('input-form');
 const btnSend = document.getElementById('btn-send');
 const btnNew = document.getElementById('btn-new');
 const btnSave = document.getElementById('btn-save');
+const btnBrief = document.getElementById('btn-brief');
 const chatTitle = document.getElementById('chat-title');
 
 // --- API helpers ---
@@ -247,6 +248,71 @@ form.addEventListener('submit', async e => {
   }
 });
 
+// --- Briefing ---
+btnBrief.addEventListener('click', async () => {
+  if (!currentSession) return;
+  setUiEnabled(false);
+  btnBrief.textContent = 'Loading…';
+
+  const assistantDiv = document.createElement('div');
+  assistantDiv.className = 'message assistant';
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  bubble.appendChild(cursor);
+  assistantDiv.appendChild(bubble);
+  messages.appendChild(assistantDiv);
+  scrollToBottom();
+
+  const res = await fetch(`/api/sessions/${currentSession.id}/brief`, { method: 'POST' });
+
+  if (!res.ok) {
+    const err = await res.json();
+    bubble.textContent = `Error: ${err.error}`;
+    setUiEnabled(true);
+    btnBrief.textContent = 'Briefing';
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let streamedText = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const event = JSON.parse(line.slice(6));
+      if (event.type === 'chunk') {
+        streamedText += event.content;
+        bubble.innerHTML = renderBold(streamedText);
+        bubble.appendChild(cursor);
+        scrollToBottom();
+      } else if (event.type === 'done') {
+        cursor.remove();
+        if (event.generated) {
+          currentSession = await api('GET', `/api/sessions/${currentSession.id}`);
+        } else {
+          assistantDiv.remove();
+        }
+        setUiEnabled(true);
+        btnBrief.textContent = 'Briefing';
+      } else if (event.type === 'error') {
+        cursor.remove();
+        bubble.textContent = `Error: ${event.message}`;
+        setUiEnabled(true);
+        btnBrief.textContent = 'Briefing';
+      }
+    }
+  }
+});
+
 // --- Save ---
 btnSave.addEventListener('click', async () => {
   if (!currentSession) return;
@@ -373,6 +439,7 @@ function setUiEnabled(enabled) {
   inputEl.disabled = !enabled;
   btnSend.disabled = !enabled;
   btnSave.disabled = !enabled || !currentSession;
+  btnBrief.disabled = !enabled || !currentSession;
   if (enabled) inputEl.focus();
 }
 
