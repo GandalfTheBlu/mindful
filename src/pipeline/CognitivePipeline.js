@@ -1,6 +1,7 @@
 import { retrieve } from './retrieve.js';
 import { articulate } from './articulate.js';
 import { extract } from './extract.js';
+import { runConsolidation } from '../core/consolidation.js';
 
 function log(label, data) {
   console.log(`[${new Date().toISOString()}] [pipeline] ${label}`, data ?? '');
@@ -37,6 +38,14 @@ export class CognitivePipeline {
     log('phase', 'extract');
     const extracted = await extract(userContent, session.messages.slice(0, -2));
     userMsg.extractedMemories = extracted;
+
+    // --- Consolidation (background maintenance) ---
+    log('phase', 'consolidation');
+    try {
+      await runConsolidation();
+    } catch (err) {
+      console.error('[pipeline] consolidation error:', err.message);
+    }
 
     log('turn:done', '');
     return { userMsg };

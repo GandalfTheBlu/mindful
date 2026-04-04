@@ -20,6 +20,14 @@
     "maxTokens": 256,
     "minSimilarity": 0.5
   },
+  "consolidation": {
+    "decayAgeDays": 14,
+    "redundancyThreshold": 0.88,
+    "abstractionThreshold": 0.72,
+    "abstractionMinClusterSize": 4,
+    "minMemoriesForLLMPasses": 10,
+    "maxMemoriesForContradictionCheck": 40
+  },
   "contextHorizon": {
     "charsPerToken": 4,
     "summarizeAtPercent": 0.65

@@ -1,6 +1,6 @@
 # mindful — Roadmap
 
-## Phase 1: Memory Lifecycle (Forgetting & Consolidation)
+## ~~Phase 1: Memory Lifecycle (Forgetting & Consolidation)~~ ✓
 
 **Goal:** Prevent the vector store from bloating and degrading over time.
 

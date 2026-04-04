@@ -7,14 +7,14 @@ function log(label, data) {
 }
 
 const EXTRACT_SYSTEM = `/no_think
-You extract long-term facts about the user from what they explicitly wrote. Rules:
-- Only extract things the user directly stated about themselves (facts, preferences, opinions, goals, skills, relationships, beliefs).
+You extract a single long-term fact about the user from what they explicitly wrote. Rules:
+- Only extract something the user directly stated about themselves (a fact, preference, opinion, goal, skill, relationship, or belief).
 - Do not infer, interpret, or generate anything beyond what was literally said.
 - Do not extract questions, greetings, or conversational intent.
-- Consolidate related facts into a single statement rather than splitting them into fragments.
-- Output at most 2 facts total. Prefer 1 if the message is about a single topic.
+- If the message mentions several related things, consolidate them into one self-contained statement.
+- The statement must be fully self-contained: never use pronouns like "it", "they", or "this" — always name the subject explicitly.
 - If the message contains no explicit personal facts, output <NOTHING>.
-- Output one fact per line as a concise third-person statement starting with "The user". Nothing else.`;
+- Output exactly one concise third-person statement starting with "The user". Nothing else.`;
 
 export async function extract(userContent, precedingMessages) {
   const context = precedingMessages
