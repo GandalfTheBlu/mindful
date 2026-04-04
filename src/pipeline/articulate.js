@@ -80,7 +80,24 @@ function makeThinkFilter(onChunk) {
   return { processChunk, flush };
 }
 
-export async function articulate(session, onChunk, observations = [], procedural = [], userModel = null) {
+function formatToolStatus(name, argsStr) {
+  try {
+    const args = JSON.parse(argsStr);
+    switch (name) {
+      case 'web_search':    return `Web search: ${args.query}`;
+      case 'web_fetch':     return `Fetching: ${(args.url ?? '').replace(/^https?:\/\//, '').slice(0, 60)}`;
+      case 'read_file':     return `Reading: ${args.path}`;
+      case 'list_directory': return `Listing: ${args.path}`;
+      case 'write_file':    return `Writing: ${args.path}`;
+      case 'create_directory': return `Creating: ${args.path}`;
+      case 'get_calendar_events': return 'Fetching calendar...';
+      case 'search_mail':   return `Searching mail: ${args.query}`;
+      default:              return `Tool: ${name}`;
+    }
+  } catch { return `Tool: ${name}`; }
+}
+
+export async function articulate(session, onChunk, observations = [], procedural = [], userModel = null, onStatus = () => {}) {
   // Condense chat history if approaching horizon
   const window = new ContextWindow(session.messages, {
     maxChars: CHAT_MAX_CHARS,
@@ -142,6 +159,7 @@ export async function articulate(session, onChunk, observations = [], procedural
     ];
 
     for (const tc of toolCalls) {
+      onStatus(formatToolStatus(tc.name, tc.arguments));
       let result;
       try {
         result = await callTool(tc.name, JSON.parse(tc.arguments), toolContext);

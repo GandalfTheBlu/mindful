@@ -22,10 +22,23 @@
         <span id="google-auth-msg">Google auth expired</span>
         <button id="btn-google-reauth">Re-authenticate</button>
       </div>
+      <button id="btn-user-model">User model</button>
       <button id="btn-search-memory">Search memory</button>
       <button id="btn-wipe-memory">Wipe memory</button>
     </div>
   </aside>
+
+  <div id="user-model-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">User model</span>
+        <button id="btn-close-user-model">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="user-model-content"></div>
+      </div>
+    </div>
+  </div>
 
   <div id="memory-search-modal" class="modal-overlay" hidden>
     <div class="modal">
@@ -36,6 +49,13 @@
       <div class="modal-body">
         <div class="search-controls">
           <input id="memory-search-input" type="text" placeholder="Search query…" autocomplete="off" />
+          <select id="memory-search-type" title="Filter by type">
+            <option value="">All types</option>
+            <option value="semantic">Semantic</option>
+            <option value="episodic">Episodic</option>
+            <option value="procedural">Procedural</option>
+            <option value="goal">Goal</option>
+          </select>
           <input id="memory-search-limit" type="number" min="1" max="100" value="10" title="Max results (1–100)" />
           <button id="btn-run-search">Search</button>
         </div>

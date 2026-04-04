@@ -107,11 +107,24 @@ export async function replaceItems(userId, ids, newText, confidence = 1.0, type 
   await addMemory(userId, newText, confidence, type);
 }
 
-export async function searchMemories(userId, text, topK) {
+export async function searchMemories(userId, text, topK, type = null) {
   const index = await getIndex(userId);
   const vector = await embed(text);
-  const results = await index.queryItems(vector, topK);
-  return results.map(r => ({ text: r.item.metadata.text, score: r.score }));
+  // Fetch more than needed so we can filter by type after scoring
+  const fetchK = type ? topK * 4 : topK;
+  const results = await index.queryItems(vector, fetchK);
+  const filtered = type
+    ? results.filter(r => (r.item.metadata.type ?? 'semantic') === type)
+    : results;
+  return filtered.slice(0, topK).map(r => ({
+    text: r.item.metadata.text,
+    score: r.score,
+    type: r.item.metadata.type ?? 'semantic',
+    confidence: r.item.metadata.confidence ?? 1.0,
+    createdAt: r.item.metadata.createdAt ?? null,
+    lastAccessed: r.item.metadata.lastAccessed ?? null,
+    accessCount: r.item.metadata.accessCount ?? 0
+  }));
 }
 
 export async function wipeMemories(userId) {

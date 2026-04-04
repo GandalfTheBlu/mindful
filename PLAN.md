@@ -176,7 +176,7 @@ Config addition:
 
 ---
 
-## Phase 8: Narrative Synthesis — Living User Model
+## ~~Phase 8: Narrative Synthesis — Living User Model~~ ✓
 
 **Goal:** Replace per-turn memory injection (discrete facts) with a maintained, holistic model of the user that captures identity, context, and trajectory. The model should feel like it *knows* you, not just that it recalls facts about you.
 
@@ -242,7 +242,7 @@ Mail content never leaves the local machine — it goes LLM → local llama-serv
 
 ---
 
-## Phase 11: Text-to-Speech & Sound Wave Visualisation
+## ~~Phase 11: Text-to-Speech & Sound Wave Visualisation~~ ✓
 
 **Goal:** Let the model speak responses aloud using a locally-run TTS engine, with a live waveform visualised in the client while audio plays.
 
@@ -264,7 +264,7 @@ TTS is opt-in — a toggle in the UI and a `tts.enabled` flag in config. Binary 
 
 ---
 
-## Phase 12: Server Activity Visualisation
+## ~~Phase 12: Server Activity Visualisation~~ ✓
 
 **Goal:** Make the client show what the server is actually doing between the user sending a message and the response appearing — retrieval, recognition, tool calls, extraction — so the system feels transparent and alive rather than a black box.
 

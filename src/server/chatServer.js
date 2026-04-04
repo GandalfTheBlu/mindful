@@ -12,7 +12,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { init as initVectra, wipeMemories, searchMemories } from '../core/vectraStore.js';
-import { wipeUserModel } from '../core/userModel.js';
+import { wipeUserModel, getUserModel } from '../core/userModel.js';
 import { getTokenStatus, startReauthFlow } from '../core/googleAuth.js';
 import { synthesize, isTTSConfigured } from '../tts.js';
 import {
@@ -108,12 +108,21 @@ app.delete('/api/memories', async (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/usermodel', (req, res) => {
+  const userId = req.query.userId;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  const model = getUserModel(userId);
+  res.json({ model: model ?? null });
+});
+
 app.post('/api/memories/search', async (req, res) => {
-  const { query, limit, userId } = req.body;
+  const { query, limit, userId, type } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId required' });
   if (!query?.trim()) return res.status(400).json({ error: 'Empty query' });
   const topK = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
-  const results = await searchMemories(userId, query.trim(), topK);
+  const validTypes = new Set(['semantic', 'episodic', 'procedural', 'goal']);
+  const typeFilter = validTypes.has(type) ? type : null;
+  const results = await searchMemories(userId, query.trim(), topK, typeFilter);
   res.json(results);
 });
 
@@ -261,9 +270,12 @@ app.post('/api/sessions/:id/chat', async (req, res) => {
   busy = true;
 
   try {
-    await pipeline.process(session, content.trim(), chunk => {
-      send({ type: 'chunk', content: chunk });
-    });
+    await pipeline.process(
+      session,
+      content.trim(),
+      chunk => send({ type: 'chunk', content: chunk }),
+      label => send({ type: 'status', label })
+    );
 
     saveSession(session);
     send({ type: 'done' });

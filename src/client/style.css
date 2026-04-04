@@ -166,6 +166,12 @@ body {
   font-size: 12px;
 }
 
+#btn-user-model {
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+#btn-user-model:hover { background: var(--border); color: var(--text); }
+
 #btn-search-memory {
   color: var(--text-dim);
   border-color: var(--border);
@@ -414,7 +420,7 @@ button:disabled { opacity: 0.35; cursor: default; }
 
 .memory-result {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 10px;
   padding: 8px 10px;
   background: var(--bg);
@@ -430,9 +436,50 @@ button:disabled { opacity: 0.35; cursor: default; }
   font-variant-numeric: tabular-nums;
   min-width: 38px;
   text-align: right;
+  padding-top: 2px;
 }
 
-.memory-text { flex: 1; line-height: 1.5; word-break: break-word; }
+.memory-body { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.memory-text { line-height: 1.5; word-break: break-word; }
+
+.memory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.memory-type {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.memory-type--semantic   { background: #1a2a3a; color: #5a9fd4; }
+.memory-type--episodic   { background: #1a2a1a; color: #5ab05a; }
+.memory-type--procedural { background: #2a2a1a; color: #b0a05a; }
+.memory-type--goal       { background: #2a1a2a; color: #a05ab0; }
+
+#user-model-content {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.search-controls select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
 
 .memory-search-empty {
   color: var(--text-dim);
@@ -440,6 +487,19 @@ button:disabled { opacity: 0.35; cursor: default; }
   text-align: center;
   padding: 20px 0;
 }
+
+/* Stream status */
+.stream-status {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 2px 0;
+  min-height: 16px;
+}
+
+/* Links */
+.message-bubble a { color: var(--accent); text-decoration: none; }
+.message-bubble a:hover { text-decoration: underline; }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; }

@@ -194,11 +194,16 @@ form.addEventListener('submit', async e => {
   // Streaming assistant bubble
   const assistantDiv = document.createElement('div');
   assistantDiv.className = 'message assistant';
+  const statusEl = document.createElement('div');
+  statusEl.className = 'stream-status';
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
+  const textSpan = document.createElement('span');
   const cursor = document.createElement('span');
   cursor.className = 'cursor';
-  bubble.appendChild(cursor);
+  textSpan.appendChild(cursor);
+  bubble.appendChild(textSpan);
+  assistantDiv.appendChild(statusEl);
   assistantDiv.appendChild(bubble);
   messages.appendChild(assistantDiv);
 
@@ -237,17 +242,22 @@ form.addEventListener('submit', async e => {
       if (!line.startsWith('data: ')) continue;
       const event = JSON.parse(line.slice(6));
 
-      if (event.type === 'chunk') {
+      if (event.type === 'status') {
+        statusEl.textContent = event.label;
+        scrollToBottom();
+      } else if (event.type === 'chunk') {
         streamedText += event.content;
-        bubble.innerHTML = renderBold(streamedText);
-        bubble.appendChild(cursor);
+        textSpan.innerHTML = renderBold(streamedText);
+        textSpan.appendChild(cursor);
         if (streamTTS) streamTTS.feedChunk(event.content);
         scrollToBottom();
       } else if (event.type === 'done') {
+        statusEl.remove();
         cursor.remove();
         if (streamTTS) streamTTS.flush();
         setUiEnabled(true);
       } else if (event.type === 'error') {
+        statusEl.remove();
         cursor.remove();
         if (streamTTS) streamTTS.stop();
         bubble.textContent = `Error: ${event.message}`;
@@ -440,6 +450,10 @@ function renderBold(text) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
   return escaped
+    .replace(/https?:\/\/[^\s<>"']+/g, url => {
+      const trimmed = url.replace(/[.,;:!?)"']+$/, '');
+      return `<a href="${trimmed}" target="_blank" rel="noopener noreferrer">${trimmed}</a>`;
+    })
     .replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>')
     .replace(/\*([^*]+?)\*/gs, '<em>$1</em>');
 }
@@ -464,6 +478,29 @@ function clearChat() {
   setUiEnabled(false);
 }
 
+// --- User model ---
+const userModelModal = document.getElementById('user-model-modal');
+const userModelContent = document.getElementById('user-model-content');
+
+document.getElementById('btn-user-model').addEventListener('click', async () => {
+  userModelContent.textContent = 'Loading…';
+  userModelModal.hidden = false;
+  const { model } = await api('GET', `/api/usermodel?userId=${encodeURIComponent(currentUserId)}`);
+  userModelContent.textContent = model ?? 'No user model has been synthesized yet.';
+});
+
+document.getElementById('btn-close-user-model').addEventListener('click', () => {
+  userModelModal.hidden = true;
+});
+
+userModelModal.addEventListener('click', e => {
+  if (e.target === userModelModal) userModelModal.hidden = true;
+});
+
+userModelModal.addEventListener('keydown', e => {
+  if (e.key === 'Escape') userModelModal.hidden = true;
+});
+
 // --- Wipe memory ---
 document.getElementById('btn-wipe-memory').addEventListener('click', async () => {
   if (!confirm(`Wipe all memories for "${currentUserId}"? This cannot be undone.`)) return;
@@ -473,6 +510,7 @@ document.getElementById('btn-wipe-memory').addEventListener('click', async () =>
 // --- Memory search ---
 const memoryModal = document.getElementById('memory-search-modal');
 const memorySearchInput = document.getElementById('memory-search-input');
+const memorySearchType = document.getElementById('memory-search-type');
 const memorySearchLimit = document.getElementById('memory-search-limit');
 const memorySearchResults = document.getElementById('memory-search-results');
 
@@ -498,14 +536,21 @@ memorySearchInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') runMemorySearch();
 });
 
+function formatDate(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 async function runMemorySearch() {
   const query = memorySearchInput.value.trim();
   if (!query) return;
 
   const limit = Math.min(Math.max(parseInt(memorySearchLimit.value) || 10, 1), 100);
+  const type = memorySearchType.value || undefined;
   memorySearchResults.innerHTML = '<div class="memory-search-empty">Searching…</div>';
 
-  const results = await api('POST', '/api/memories/search', { query, limit, userId: currentUserId });
+  const results = await api('POST', '/api/memories/search', { query, limit, userId: currentUserId, type });
 
   if (!Array.isArray(results) || results.length === 0) {
     memorySearchResults.innerHTML = '<div class="memory-search-empty">No results.</div>';
@@ -521,12 +566,40 @@ async function runMemorySearch() {
     score.className = 'memory-score';
     score.textContent = `${Math.round(r.score * 100)}%`;
 
-    const text = document.createElement('span');
+    const body = document.createElement('div');
+    body.className = 'memory-body';
+
+    const text = document.createElement('div');
     text.className = 'memory-text';
     text.textContent = r.text;
 
+    const meta = document.createElement('div');
+    meta.className = 'memory-meta';
+
+    const typeBadge = document.createElement('span');
+    typeBadge.className = `memory-type memory-type--${r.type}`;
+    typeBadge.textContent = r.type;
+
+    const conf = document.createElement('span');
+    conf.textContent = `${Math.round(r.confidence * 100)}% conf`;
+
+    const created = document.createElement('span');
+    created.textContent = formatDate(r.createdAt) ?? '';
+
+    const accessed = document.createElement('span');
+    accessed.textContent = r.accessCount > 0
+      ? `accessed ${r.accessCount}×, last ${formatDate(r.lastAccessed)}`
+      : 'never accessed';
+
+    meta.appendChild(typeBadge);
+    meta.appendChild(conf);
+    meta.appendChild(created);
+    meta.appendChild(accessed);
+
+    body.appendChild(text);
+    body.appendChild(meta);
     row.appendChild(score);
-    row.appendChild(text);
+    row.appendChild(body);
     memorySearchResults.appendChild(row);
   }
 }
