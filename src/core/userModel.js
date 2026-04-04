@@ -24,6 +24,12 @@ export function getUserModel(userId) {
   return fs.readFileSync(p, 'utf8').trim() || null;
 }
 
+export function wipeUserModel(userId) {
+  [modelPath(userId), metaPath(userId)].forEach(p => {
+    try { fs.unlinkSync(p); } catch {}
+  });
+}
+
 function saveUserModel(userId, text) {
   fs.writeFileSync(modelPath(userId), text, 'utf8');
 }

@@ -12,6 +12,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { init as initVectra, wipeMemories, searchMemories } from '../core/vectraStore.js';
+import { wipeUserModel } from '../core/userModel.js';
 import { getTokenStatus, startReauthFlow } from '../core/googleAuth.js';
 import { synthesize, isTTSConfigured } from '../tts.js';
 import {
@@ -103,6 +104,7 @@ app.delete('/api/memories', async (req, res) => {
   const userId = req.query.userId;
   if (!userId) return res.status(400).json({ error: 'userId required' });
   await wipeMemories(userId);
+  wipeUserModel(userId);
   res.json({ ok: true });
 });
 
