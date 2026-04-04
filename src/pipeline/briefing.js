@@ -5,7 +5,6 @@ import { getCalendarEvents } from '../tools/googleCalendar.js';
 import { searchMail } from '../tools/googleMail.js';
 import { listTasks } from '../tools/googleTasks.js';
 import { getWeather } from '../tools/weather.js';
-import { getRecentlyPlayed } from '../tools/spotify.js';
 import config from '../config.js';
 
 function log(label, data) {
@@ -19,7 +18,6 @@ You are generating a daily briefing for a user. Using the provided context, writ
 - Surface tasks that are overdue or due soon; skip the routine ones unless they connect to something else.
 - Surface emails that are genuinely important or actionable; skip promotions and newsletters.
 - Note the weather only when it's relevant to something in the schedule or goals (e.g. an outdoor event, a commute).
-- If recent listening suggests a mood or energy level, you may briefly acknowledge it — but keep it light.
 - Note meaningful connections across sources (event + related task + weather, goal + overdue task, etc.).
 - Be direct and specific. Skip anything routine or irrelevant.`;
 
@@ -27,11 +25,10 @@ export async function runBriefing(session, onChunk) {
   const { userId } = session;
   const googleConfigured = !!config.google?.tokenFile;
   const weatherConfigured = config.tools?.weather?.lat != null && config.tools?.weather?.lon != null;
-  const spotifyConfigured = !!config.spotify?.tokenFile;
 
-  log('start', `userId=${userId}, google=${googleConfigured}, weather=${weatherConfigured}, spotify=${spotifyConfigured}`);
+  log('start', `userId=${userId}, google=${googleConfigured}, weather=${weatherConfigured}`);
 
-  const [calendarText, mailText, tasksText, weatherText, recentlyPlayedText, goals, userModel] = await Promise.all([
+  const [calendarText, mailText, tasksText, weatherText, goals, userModel] = await Promise.all([
     googleConfigured
       ? getCalendarEvents({ days: 7, maxResults: 20 }).catch(err => `(unavailable: ${err.message})`)
       : Promise.resolve(null),
@@ -44,9 +41,6 @@ export async function runBriefing(session, onChunk) {
     weatherConfigured
       ? getWeather({ days: 7 }).catch(err => `(unavailable: ${err.message})`)
       : Promise.resolve(null),
-    spotifyConfigured
-      ? getRecentlyPlayed({ limit: 10 }).catch(err => null)
-      : Promise.resolve(null),
     listByType(userId, 'goal'),
     Promise.resolve(getUserModel(userId))
   ]);
@@ -58,7 +52,6 @@ export async function runBriefing(session, onChunk) {
   if (mailText) sections.push(`Recent important mail:\n${mailText}`);
   if (goals.length > 0) sections.push(`Active goals:\n${goals.map(g => `- ${g}`).join('\n')}`);
   if (userModel) sections.push(`About the user:\n${userModel}`);
-  if (recentlyPlayedText) sections.push(`Recently played on Spotify:\n${recentlyPlayedText}`);
 
   const contextContent = sections.join('\n\n');
   log('context', `sections=${sections.length}, goals=${goals.length}, userModel=${!!userModel}`);

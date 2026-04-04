@@ -27,7 +27,7 @@ export async function searchMail({ query, maxResults = 10, includeBody = false }
       userId: 'me',
       id: msg.id,
       format: includeBody ? 'full' : 'metadata',
-      metadataHeaders: ['From', 'To', 'Subject', 'Date']
+      metadataHeaders: ['From', 'Subject']
     });
 
     const headers = full.data.payload?.headers ?? [];
@@ -35,19 +35,24 @@ export async function searchMail({ query, maxResults = 10, includeBody = false }
 
     const subject = get('Subject');
     const from = get('From');
-    const date = get('Date');
     const snippet = full.data.snippet ?? '';
+    const internalDate = parseInt(full.data.internalDate ?? '0');
+    const dateStr = internalDate
+      ? new Date(internalDate).toISOString().replace('T', ' ').slice(0, 16) + ' UTC'
+      : '(unknown date)';
 
     if (!includeBody) {
-      return `Date: ${date}\nFrom: ${from}\nSubject: ${subject}\nSnippet: ${snippet}`;
+      return { internalDate, text: `Date: ${dateStr}\nFrom: ${from}\nSubject: ${subject}\nSnippet: ${snippet}` };
     }
 
-    // Extract plain text body
     const body = extractBody(full.data.payload);
-    return `Date: ${date}\nFrom: ${from}\nSubject: ${subject}\n\n${body}`;
+    return { internalDate, text: `Date: ${dateStr}\nFrom: ${from}\nSubject: ${subject}\n\n${body}` };
   }));
 
-  return results.join('\n\n---\n\n');
+  // Sort newest first using Gmail's authoritative arrival timestamp
+  results.sort((a, b) => b.internalDate - a.internalDate);
+
+  return results.map(r => r.text).join('\n\n---\n\n');
 }
 
 function extractBody(payload) {
