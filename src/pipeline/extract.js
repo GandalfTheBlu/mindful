@@ -7,6 +7,7 @@ function log(label, data) {
 }
 
 const CONFIDENCE_MAP = { high: 1.0, medium: 0.6, low: 0.3 };
+const VALID_TYPES = new Set(['semantic', 'episodic', 'procedural', 'goal']);
 
 const EXTRACT_SYSTEM = `/no_think
 You extract long-term facts about the user from the "User message" line ONLY. The context is provided solely so you can resolve pronouns or references — do NOT extract anything from it.
@@ -25,8 +26,14 @@ Rules:
 - Each statement must start with "The user".
 - If the User message contains no explicit personal facts, output <NOTHING>.
 - Do NOT include dates — those are added by the system.
-- After each statement, append " | high", " | medium", or " | low" based on assertion strength: "high" for explicit declarations and factual updates (including corrections like "actually I quit"), "medium" for hedged or uncertain language ("I think", "kind of", "maybe", "I guess"), "low" for anything very tentative or speculative.
-- Output only the statements with confidence labels, nothing else.`;
+- After each statement, append " | <confidence> | <type>" where:
+  - <confidence> is "high" for explicit declarations and factual updates (including corrections), "medium" for hedged language ("I think", "kind of", "maybe"), "low" for anything tentative or speculative.
+  - <type> is one of:
+    - "semantic" — a timeless trait, skill, belief, preference, or relationship about the user's life.
+    - "episodic" — something that happened to the user or was true during a specific time or period.
+    - "procedural" — an instruction for how this AI should write its responses: length, tone, format, or style. Only use this type when the user is directly telling you how to reply.
+    - "goal" — something the user intends to do or achieve in the future.
+- Output only the statements with labels, nothing else.`;
 
 // Question-only messages can never contain extractable personal facts.
 // Guard against the small model hallucinating from injected context.
@@ -69,13 +76,26 @@ export async function extract(userContent, precedingMessages, userId) {
 
   const stored = [];
   for (const line of lines) {
-    const pipeIdx = line.lastIndexOf(' | ');
-    const fact = pipeIdx !== -1 ? line.slice(0, pipeIdx).trim() : line;
-    const label = pipeIdx !== -1 ? line.slice(pipeIdx + 3).trim().toLowerCase() : 'high';
+    const parts = line.split(' | ');
+    const fact = parts[0].trim();
+    const label = (parts[1] ?? 'high').trim().toLowerCase();
+    const typeRaw = (parts[2] ?? 'semantic').trim().toLowerCase();
     const confidence = CONFIDENCE_MAP[label] ?? 1.0;
+    let type = VALID_TYPES.has(typeRaw) ? typeRaw : 'semantic';
+    // Fallback: reclassify as procedural if the fact describes AI response style
+    if (type === 'semantic' && /\b(responses?|replies|answers?)\b/i.test(fact) && /\b(prefers?|wants?|likes?|keep|make)\b/i.test(fact)) {
+      type = 'procedural';
+    }
+    // Fallback: reclassify as episodic if the original message contained temporal markers
+    // and the extracted fact uses past tense (describing something that happened)
+    if (type === 'semantic'
+      && /\b(last\s+\w+|yesterday|\d+\s+(days?|weeks?|months?|years?)\s+ago|just\s+(got|started|finished|quit|moved|got)|used\s+to|recently)\b/i.test(userContent)
+      && /\b(was|were|got|started|finished|quit|moved|had|became|shipped|joined|left)\b/i.test(fact)) {
+      type = 'episodic';
+    }
     const dated = `${fact} [${now}]`;
-    log('result', `${dated} (confidence: ${confidence})`);
-    await addMemory(userId, dated, confidence);
+    log('result', `${dated} (confidence: ${confidence}, type: ${type})`);
+    await addMemory(userId, dated, confidence, type);
     log('stored', dated);
     stored.push(dated);
   }

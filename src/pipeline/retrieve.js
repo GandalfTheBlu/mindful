@@ -1,5 +1,5 @@
 import { complete } from '../llm.js';
-import { queryMemories } from '../core/vectraStore.js';
+import { queryMemories, listByType } from '../core/vectraStore.js';
 import config from '../config.js';
 
 function log(label, data) {
@@ -76,5 +76,9 @@ export async function retrieve(session, userContent) {
 
   log('injected', injectedTexts.length > 0 ? injectedTexts : '(none)');
 
-  return { injected: injectedTexts, injectedFormatted, expandedQuery };
+  // Procedural memories are always injected into the system prompt regardless of the current topic
+  const procedural = await listByType(userId, 'procedural');
+  if (procedural.length > 0) log('procedural', procedural);
+
+  return { injected: injectedTexts, injectedFormatted, procedural, expandedQuery };
 }

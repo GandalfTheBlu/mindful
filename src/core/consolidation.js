@@ -105,10 +105,11 @@ async function redundancyPass(userId, items) {
     if (!mergedText) continue;
 
     const avgConfidence = cluster.reduce((s, i) => s + (i.metadata.confidence ?? 1.0), 0) / cluster.length;
+    const clusterType = cluster[0].metadata.type ?? 'semantic';
     const datedMerge = redate(mergedText);
     const sources = cluster.map(i => `  - ${i.metadata.text}`).join('\n');
     log('redundancy', `merged ${cluster.length} memories:\n${sources}\n  → ${datedMerge}`);
-    await replaceItems(userId, cluster.map(i => i.id), datedMerge, avgConfidence);
+    await replaceItems(userId, cluster.map(i => i.id), datedMerge, avgConfidence, clusterType);
     cluster.forEach(item => processed.add(item.id));
     merged++;
   }
@@ -178,9 +179,10 @@ async function contradictionPass(userId, items) {
     if (!resolvedText) continue;
 
     const resolvedConfidence = sorted[b].metadata.confidence ?? 1.0;
+    const resolvedType = sorted[b].metadata.type ?? 'semantic';
     const datedResolution = redate(resolvedText);
     log('contradiction', `resolved conflict:\n  A: ${sorted[a].metadata.text}\n  B: ${sorted[b].metadata.text}\n  → ${datedResolution}`);
-    await replaceItems(userId, [sorted[a].id, sorted[b].id], datedResolution, resolvedConfidence);
+    await replaceItems(userId, [sorted[a].id, sorted[b].id], datedResolution, resolvedConfidence, resolvedType);
     processed.add(sorted[a].id);
     processed.add(sorted[b].id);
     resolved++;
@@ -219,10 +221,11 @@ async function abstractionPass(userId, items) {
     if (!abstractText) continue;
 
     const minConfidence = Math.min(...cluster.map(i => i.metadata.confidence ?? 1.0));
+    const clusterType = cluster[0].metadata.type ?? 'semantic';
     const datedAbstraction = redate(abstractText);
     const sources = cluster.map(i => `  - ${i.metadata.text}`).join('\n');
     log('abstraction', `abstracted ${cluster.length} memories:\n${sources}\n  → ${datedAbstraction}`);
-    await replaceItems(userId, cluster.map(i => i.id), datedAbstraction, minConfidence);
+    await replaceItems(userId, cluster.map(i => i.id), datedAbstraction, minConfidence, clusterType);
     cluster.forEach(item => processed.add(item.id));
     abstracted++;
   }

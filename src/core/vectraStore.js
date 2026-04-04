@@ -25,11 +25,11 @@ export async function init() {
   // Indexes are created on demand; nothing to pre-initialize.
 }
 
-export async function addMemory(userId, text, confidence = 1.0) {
+export async function addMemory(userId, text, confidence = 1.0, type = 'semantic') {
   const index = await getIndex(userId);
   const vector = await embed(text);
   const now = Date.now();
-  await index.insertItem({ vector, metadata: { text, createdAt: now, lastAccessed: now, accessCount: 0, confidence } });
+  await index.insertItem({ vector, metadata: { text, createdAt: now, lastAccessed: now, accessCount: 0, confidence, type } });
 }
 
 export async function queryMemories(userId, text, topK) {
@@ -58,7 +58,7 @@ export async function queryMemories(userId, text, topK) {
     await index.endUpdate();
   }
 
-  return hits.map(r => ({ text: r.item.metadata.text, confidence: r.item.metadata.confidence ?? 1.0 }));
+  return hits.map(r => ({ text: r.item.metadata.text, confidence: r.item.metadata.confidence ?? 1.0, type: r.item.metadata.type ?? 'semantic' }));
 }
 
 export async function listAllMemories(userId) {
@@ -81,9 +81,18 @@ export async function deleteItems(userId, ids) {
   await index.endUpdate();
 }
 
-export async function replaceItems(userId, ids, newText, confidence = 1.0) {
+export async function listByType(userId, type) {
+  const index = await getIndex(userId);
+  const items = await index.listItems();
+  return items
+    .filter(i => (i.metadata.type ?? 'semantic') === type)
+    .map(i => i.metadata.text)
+    .filter(Boolean);
+}
+
+export async function replaceItems(userId, ids, newText, confidence = 1.0, type = 'semantic') {
   await deleteItems(userId, ids);
-  await addMemory(userId, newText, confidence);
+  await addMemory(userId, newText, confidence, type);
 }
 
 export async function searchMemories(userId, text, topK) {

@@ -17,7 +17,7 @@ export class CognitivePipeline {
 
     // --- Phase 1: Retrieve ---
     log('phase', 'retrieve');
-    const { injected, injectedFormatted, expandedQuery } = await retrieve(session, userContent);
+    const { injected, injectedFormatted, procedural, expandedQuery } = await retrieve(session, userContent);
 
     // --- Phase 1b: Pattern recognition ---
     log('phase', 'recognize');
@@ -39,7 +39,7 @@ export class CognitivePipeline {
 
     // --- Phase 2: Articulate ---
     log('phase', 'articulate');
-    const assistantContent = await articulate(session, onChunk, observations);
+    const assistantContent = await articulate(session, onChunk, observations, procedural);
     session.messages.push({ role: 'assistant', content: assistantContent });
 
     // --- Phase 3: Extract ---
