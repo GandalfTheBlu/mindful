@@ -1,7 +1,22 @@
 import { webFetch } from './webFetch.js';
+import { webSearch } from './webSearch.js';
 import { readFile } from './readFile.js';
 
 export const TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description: 'Search the web and return a list of relevant results (titles, URLs, snippets). Use web_fetch to retrieve the full content of any result.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'The search query.' }
+        },
+        required: ['query']
+      }
+    }
+  },
   {
     type: 'function',
     function: {
@@ -37,6 +52,7 @@ export const TOOLS = [
 ];
 
 export async function callTool(name, args) {
+  if (name === 'web_search') return String(await webSearch(args));
   if (name === 'web_fetch') return String(await webFetch(args));
   if (name === 'read_file') return String(await readFile(args));
   throw new Error(`Unknown tool: ${name}`);

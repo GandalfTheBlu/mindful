@@ -57,7 +57,10 @@ export async function streamOrToolCalls(messages, tools, onChunk, options = {}) 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages, stream: true, tools, ...options })
   });
-  if (!res.ok) throw new Error(`LLM stream error ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`LLM stream error ${res.status}: ${body.slice(0, 500)}`);
+  }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

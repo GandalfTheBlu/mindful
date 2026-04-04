@@ -118,7 +118,7 @@ export async function articulate(session, onChunk, observations = [], procedural
       ...currentMessages,
       {
         role: 'assistant',
-        content: null,
+        content: '',
         tool_calls: toolCalls.map(tc => ({
           id: tc.id,
           type: 'function',
