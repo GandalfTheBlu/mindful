@@ -6,6 +6,18 @@ function log(label, data) {
   console.log(`[${new Date().toISOString()}] [consolidation] ${label}`, data ?? '');
 }
 
+// Strip and re-attach the [YYYY-MM-DD] date tag so consolidation LLM calls
+// never see or hallucinate dates, and merged results always carry today's date.
+const DATE_TAG = /\s*\[\d{4}-\d{2}-\d{2}\]$/;
+
+function stripDate(text) {
+  return text.replace(DATE_TAG, '');
+}
+
+function redate(text) {
+  return `${stripDate(text)} [${new Date().toISOString().slice(0, 10)}]`;
+}
+
 function cosineSim(a, b) {
   let dot = 0;
   for (let i = 0; i < a.vector.length; i++) dot += a.vector[i] * b.vector[i];
@@ -77,7 +89,7 @@ async function redundancyPass(userId, items) {
   for (const cluster of clusters) {
     if (cluster.some(item => processed.has(item.id))) continue;
 
-    const texts = cluster.map((item, i) => `${i + 1}. ${item.metadata.text}`).join('\n');
+    const texts = cluster.map((item, i) => `${i + 1}. ${stripDate(item.metadata.text)}`).join('\n');
     const result = await complete(
       [
         { role: 'system', content: MERGE_SYSTEM },
@@ -88,8 +100,9 @@ async function redundancyPass(userId, items) {
     const mergedText = result.trim();
     if (!mergedText) continue;
 
-    log('redundancy:merged', mergedText);
-    await replaceItems(userId, cluster.map(i => i.id), mergedText);
+    const datedMerge = redate(mergedText);
+    log('redundancy:merged', datedMerge);
+    await replaceItems(userId, cluster.map(i => i.id), datedMerge);
     cluster.forEach(item => processed.add(item.id));
     merged++;
   }
@@ -111,7 +124,7 @@ async function contradictionPass(userId, items) {
     return 0;
   }
 
-  const numbered = items.map((item, i) => `${i + 1}. ${item.metadata.text}`).join('\n');
+  const numbered = items.map((item, i) => `${i + 1}. ${stripDate(item.metadata.text)}`).join('\n');
   const response = await complete(
     [
       { role: 'system', content: CONTRADICTION_DETECT_SYSTEM },
@@ -145,15 +158,16 @@ async function contradictionPass(userId, items) {
     const result = await complete(
       [
         { role: 'system', content: CONTRADICTION_RESOLVE_SYSTEM },
-        { role: 'user', content: `A: ${items[a].metadata.text}\nB: ${items[b].metadata.text}` }
+        { role: 'user', content: `A: ${stripDate(items[a].metadata.text)}\nB: ${stripDate(items[b].metadata.text)}` }
       ],
       { max_tokens: config.memory.maxTokens }
     );
     const resolvedText = result.trim();
     if (!resolvedText) continue;
 
-    log('contradiction:resolved', resolvedText);
-    await replaceItems(userId, [items[a].id, items[b].id], resolvedText);
+    const datedResolution = redate(resolvedText);
+    log('contradiction:resolved', datedResolution);
+    await replaceItems(userId, [items[a].id, items[b].id], datedResolution);
     processed.add(items[a].id);
     processed.add(items[b].id);
     resolved++;
@@ -181,7 +195,7 @@ async function abstractionPass(userId, items) {
   for (const cluster of clusters) {
     if (cluster.some(item => processed.has(item.id))) continue;
 
-    const texts = cluster.map((item, i) => `${i + 1}. ${item.metadata.text}`).join('\n');
+    const texts = cluster.map((item, i) => `${i + 1}. ${stripDate(item.metadata.text)}`).join('\n');
     const result = await complete(
       [
         { role: 'system', content: ABSTRACT_SYSTEM },
@@ -192,8 +206,9 @@ async function abstractionPass(userId, items) {
     const abstractText = result.trim();
     if (!abstractText) continue;
 
-    log('abstraction:abstracted', abstractText);
-    await replaceItems(userId, cluster.map(i => i.id), abstractText);
+    const datedAbstraction = redate(abstractText);
+    log('abstraction:abstracted', datedAbstraction);
+    await replaceItems(userId, cluster.map(i => i.id), datedAbstraction);
     cluster.forEach(item => processed.add(item.id));
     abstracted++;
   }
@@ -220,13 +235,14 @@ export async function runConsolidation(userId) {
     return;
   }
 
-  // Pass 2: Redundancy
-  const merged = await redundancyPass(userId, items);
-  if (merged > 0) items = await listAllItems(userId);
-
-  // Pass 3: Contradiction
+  // Pass 2: Contradiction — must run before redundancy so genuine updates
+  // aren't merged away as near-duplicates before they can be resolved.
   const resolved = await contradictionPass(userId, items);
   if (resolved > 0) items = await listAllItems(userId);
+
+  // Pass 3: Redundancy
+  const merged = await redundancyPass(userId, items);
+  if (merged > 0) items = await listAllItems(userId);
 
   // Pass 4: Abstraction
   await abstractionPass(userId, items);

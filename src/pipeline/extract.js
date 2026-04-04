@@ -7,15 +7,17 @@ function log(label, data) {
 }
 
 const EXTRACT_SYSTEM = `/no_think
-You extract long-term facts about the user from what they explicitly wrote. Rules:
-- Only extract something the user directly stated about themselves (a fact, preference, opinion, goal, skill, relationship, or belief).
-- Do not infer, interpret, or generate anything beyond what was literally said.
+You extract long-term facts about the user from the "User message" line ONLY. The context is provided solely so you can resolve pronouns or references — do NOT extract anything from it.
+
+Rules:
+- Only extract something the user directly stated about themselves in the User message (a fact, preference, opinion, goal, skill, relationship, or belief).
+- Do not infer, interpret, or generate anything beyond what was literally said in the User message.
 - Do not extract questions, greetings, or conversational intent.
-- If the message mentions several related things about the same subject, consolidate them into one self-contained statement.
-- If the message contains genuinely unrelated facts (e.g. "I have a dog" and "I am studying physics"), output each as a separate line.
+- If the User message mentions several related things about the same subject, consolidate them into one self-contained statement.
+- If the User message contains genuinely unrelated facts (e.g. "I have a dog" and "I am studying physics"), output each as a separate line.
 - Each statement must be fully self-contained: never use pronouns like "it", "they", or "this" — always name the subject explicitly.
 - Each statement must start with "The user".
-- If the message contains no explicit personal facts, output <NOTHING>.
+- If the User message contains no explicit personal facts, output <NOTHING>.
 - Do NOT include dates — those are added by the system.
 - Output only the statements, nothing else.`;
 

@@ -23,8 +23,8 @@
   "consolidation": {
     "decayAgeDays": 14,
     "redundancyThreshold": 0.88,
-    "abstractionThreshold": 0.72,
-    "abstractionMinClusterSize": 4,
+    "abstractionThreshold": 0.80,
+    "abstractionMinClusterSize": 6,
     "minMemoriesForLLMPasses": 5,
     "maxMemoriesForContradictionCheck": 40
   },
