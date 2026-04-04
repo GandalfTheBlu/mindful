@@ -13,6 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { init as initVectra, wipeMemories, searchMemories } from '../core/vectraStore.js';
 import { getTokenStatus, startReauthFlow } from '../core/googleAuth.js';
+import { synthesize, isTTSConfigured } from '../tts.js';
 import {
   ensureDataDir, listSessions, listUsers, getSession,
   saveSession, deleteSession, deleteUserSessions, createSession
@@ -112,6 +113,22 @@ app.post('/api/memories/search', async (req, res) => {
   const topK = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
   const results = await searchMemories(userId, query.trim(), topK);
   res.json(results);
+});
+
+// --- TTS route ---
+app.post('/api/tts', async (req, res) => {
+  const { text } = req.body;
+  if (!text?.trim()) return res.status(400).json({ error: 'No text provided' });
+  if (!isTTSConfigured()) return res.status(503).json({ error: 'TTS not configured' });
+  try {
+    const wav = await synthesize(text);
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('Content-Length', wav.length);
+    res.end(wav);
+  } catch (err) {
+    console.error('[tts]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Google auth routes ---

@@ -15,6 +15,7 @@ const btnSend = document.getElementById('btn-send');
 const btnNew = document.getElementById('btn-new');
 const btnSave = document.getElementById('btn-save');
 const btnBrief = document.getElementById('btn-brief');
+const btnTts = document.getElementById('btn-tts');
 const chatTitle = document.getElementById('chat-title');
 
 // --- API helpers ---
@@ -238,6 +239,7 @@ form.addEventListener('submit', async e => {
         scrollToBottom();
       } else if (event.type === 'done') {
         cursor.remove();
+        if (streamedText) speakText(streamedText, assistantDiv);
         setUiEnabled(true);
       } else if (event.type === 'error') {
         cursor.remove();
@@ -298,6 +300,7 @@ btnBrief.addEventListener('click', async () => {
         cursor.remove();
         if (event.generated) {
           currentSession = await api('GET', `/api/sessions/${currentSession.id}`);
+          if (streamedText) speakText(streamedText, assistantDiv);
         } else {
           assistantDiv.remove();
         }
@@ -521,6 +524,106 @@ async function runMemorySearch() {
   }
 }
 
+// --- TTS ---
+let ttsEnabled = localStorage.getItem('mindful_tts') !== 'false';
+let ttsAudioCtx = null;
+let ttsCurrentSource = null;
+
+function updateTtsButton() {
+  btnTts.textContent = ttsEnabled ? '\u{1F50A}' : '\u{1F507}';
+  btnTts.style.opacity = ttsEnabled ? '1' : '0.4';
+}
+
+btnTts.addEventListener('click', () => {
+  ttsEnabled = !ttsEnabled;
+  localStorage.setItem('mindful_tts', ttsEnabled);
+  updateTtsButton();
+  if (!ttsEnabled && ttsCurrentSource) {
+    ttsCurrentSource.stop();
+    ttsCurrentSource = null;
+  }
+});
+
+function getAudioCtx() {
+  if (!ttsAudioCtx || ttsAudioCtx.state === 'closed') {
+    ttsAudioCtx = new AudioContext();
+  }
+  return ttsAudioCtx;
+}
+
+async function speakText(text, messageDiv) {
+  if (!ttsEnabled) return;
+  if (ttsCurrentSource) { ttsCurrentSource.stop(); ttsCurrentSource = null; }
+
+  let wav;
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    if (!res.ok) return;
+    wav = await res.arrayBuffer();
+  } catch { return; }
+
+  const ctx = getAudioCtx();
+  let audioBuffer;
+  try { audioBuffer = await ctx.decodeAudioData(wav); }
+  catch { return; }
+
+  // Build audio graph: source → analyser → destination
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  const source = ctx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(analyser);
+  analyser.connect(ctx.destination);
+
+  // Attach waveform canvas to the message
+  const canvas = document.createElement('canvas');
+  canvas.className = 'waveform';
+  canvas.width = 400;
+  canvas.height = 40;
+  messageDiv.appendChild(canvas);
+  scrollToBottom();
+
+  const canvasCtx = canvas.getContext('2d');
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  let animId;
+
+  function drawWaveform() {
+    animId = requestAnimationFrame(drawWaveform);
+    analyser.getByteTimeDomainData(dataArray);
+    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+    canvasCtx.strokeStyle = '#6a9fb5';
+    canvasCtx.lineWidth = 1.5;
+    canvasCtx.beginPath();
+    const sliceWidth = canvas.width / dataArray.length;
+    let x = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      const v = dataArray[i] / 128.0;
+      const y = (v * canvas.height) / 2;
+      i === 0 ? canvasCtx.moveTo(x, y) : canvasCtx.lineTo(x, y);
+      x += sliceWidth;
+    }
+    canvasCtx.lineTo(canvas.width, canvas.height / 2);
+    canvasCtx.stroke();
+  }
+
+  ttsCurrentSource = source;
+  source.start();
+  drawWaveform();
+
+  source.onended = () => {
+    cancelAnimationFrame(animId);
+    ttsCurrentSource = null;
+    // Fade out and remove canvas
+    canvas.style.transition = 'opacity 0.5s';
+    canvas.style.opacity = '0';
+    setTimeout(() => canvas.remove(), 500);
+  };
+}
+
 // --- Google auth banner ---
 const googleAuthBanner = document.getElementById('google-auth-banner');
 const googleAuthMsg = document.getElementById('google-auth-msg');
@@ -571,3 +674,4 @@ btnGoogleReauth.addEventListener('click', async () => {
 renderUserDisplay();
 loadSessionList();
 checkGoogleAuthStatus();
+updateTtsButton();
