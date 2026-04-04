@@ -220,6 +220,11 @@ form.addEventListener('submit', async e => {
   let buffer = '';
   let streamedText = '';
 
+  // Start streaming TTS immediately — feed sentences as text arrives
+  if (activeTTS) { activeTTS.stop(); activeTTS = null; }
+  const streamTTS = ttsEnabled ? new StreamingTTS(bubble) : null;
+  if (streamTTS) activeTTS = streamTTS;
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -236,13 +241,15 @@ form.addEventListener('submit', async e => {
         streamedText += event.content;
         bubble.innerHTML = renderBold(streamedText);
         bubble.appendChild(cursor);
+        if (streamTTS) streamTTS.feedChunk(event.content);
         scrollToBottom();
       } else if (event.type === 'done') {
         cursor.remove();
-        if (streamedText) speakText(streamedText, assistantDiv);
+        if (streamTTS) streamTTS.flush();
         setUiEnabled(true);
       } else if (event.type === 'error') {
         cursor.remove();
+        if (streamTTS) streamTTS.stop();
         bubble.textContent = `Error: ${event.message}`;
         setUiEnabled(true);
       }
@@ -527,7 +534,7 @@ async function runMemorySearch() {
 // --- TTS ---
 let ttsEnabled = localStorage.getItem('mindful_tts') !== 'false';
 let ttsAudioCtx = null;
-let ttsCurrentSource = null;
+let activeTTS = null; // current StreamingTTS instance
 
 function updateTtsButton() {
   btnTts.textContent = ttsEnabled ? '\u{1F50A}' : '\u{1F507}';
@@ -538,94 +545,166 @@ btnTts.addEventListener('click', () => {
   ttsEnabled = !ttsEnabled;
   localStorage.setItem('mindful_tts', ttsEnabled);
   updateTtsButton();
-  if (!ttsEnabled && ttsCurrentSource) {
-    ttsCurrentSource.stop();
-    ttsCurrentSource = null;
-  }
+  if (!ttsEnabled && activeTTS) { activeTTS.stop(); activeTTS = null; }
 });
 
 function getAudioCtx() {
-  if (!ttsAudioCtx || ttsAudioCtx.state === 'closed') {
-    ttsAudioCtx = new AudioContext();
-  }
+  if (!ttsAudioCtx || ttsAudioCtx.state === 'closed') ttsAudioCtx = new AudioContext();
   return ttsAudioCtx;
 }
 
-async function speakText(text, messageDiv) {
-  if (!ttsEnabled) return;
-  if (ttsCurrentSource) { ttsCurrentSource.stop(); ttsCurrentSource = null; }
+// Split buffered text into speakable sentences, return [sentences, remainder].
+// Splits on sentence-ending punctuation followed by whitespace, keeping only
+// chunks of at least MIN_CHARS to avoid sending fragments like "1." or "e.g.".
+const MIN_CHUNK_CHARS = 60;
+const SENTENCE_END = /[.!?]+\s+/g;
 
-  let wav;
-  try {
-    const res = await fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
-    if (!res.ok) return;
-    wav = await res.arrayBuffer();
-  } catch { return; }
-
-  const ctx = getAudioCtx();
-  let audioBuffer;
-  try { audioBuffer = await ctx.decodeAudioData(wav); }
-  catch { return; }
-
-  // Build audio graph: source → analyser → destination
-  const analyser = ctx.createAnalyser();
-  analyser.fftSize = 1024;
-  const source = ctx.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(analyser);
-  analyser.connect(ctx.destination);
-
-  // Attach waveform canvas inside the bubble so it inherits its width
-  const bubble = messageDiv.querySelector('.message-bubble');
-  const canvas = document.createElement('canvas');
-  canvas.className = 'waveform';
-  canvas.height = 40;
-  bubble.appendChild(canvas);
-  // Match canvas internal resolution to its rendered width
-  canvas.width = canvas.offsetWidth || bubble.offsetWidth || 400;
-  scrollToBottom();
-
-  const canvasCtx = canvas.getContext('2d');
-  const dataArray = new Uint8Array(analyser.frequencyBinCount);
-  let animId;
-
-  function drawWaveform() {
-    animId = requestAnimationFrame(drawWaveform);
-    // Keep canvas resolution in sync if bubble is resized
-    if (canvas.offsetWidth !== canvas.width) canvas.width = canvas.offsetWidth;
-    analyser.getByteTimeDomainData(dataArray);
-    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-    canvasCtx.strokeStyle = '#6a9fb5';
-    canvasCtx.lineWidth = 1.5;
-    canvasCtx.beginPath();
-    const sliceWidth = canvas.width / dataArray.length;
-    let x = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      const v = dataArray[i] / 128.0;
-      const y = (v * canvas.height) / 2;
-      i === 0 ? canvasCtx.moveTo(x, y) : canvasCtx.lineTo(x, y);
-      x += sliceWidth;
+function extractSentences(buffer) {
+  const sentences = [];
+  let lastIndex = 0;
+  let match;
+  SENTENCE_END.lastIndex = 0;
+  while ((match = SENTENCE_END.exec(buffer)) !== null) {
+    const end = match.index + match[0].length;
+    const chunk = buffer.slice(lastIndex, end).trim();
+    if (chunk.length >= MIN_CHUNK_CHARS) {
+      sentences.push(chunk);
+      lastIndex = end;
     }
-    canvasCtx.lineTo(canvas.width, canvas.height / 2);
-    canvasCtx.stroke();
+  }
+  return [sentences, buffer.slice(lastIndex)];
+}
+
+function drawWaveformFrame(canvas, analyser, dataArray) {
+  if (canvas.offsetWidth && canvas.offsetWidth !== canvas.width) canvas.width = canvas.offsetWidth;
+  const ctx = canvas.getContext('2d');
+  analyser.getByteTimeDomainData(dataArray);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = '#6a9fb5';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  const sliceWidth = canvas.width / dataArray.length;
+  let x = 0;
+  for (let i = 0; i < dataArray.length; i++) {
+    const v = dataArray[i] / 128.0;
+    const y = (v * canvas.height) / 2;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    x += sliceWidth;
+  }
+  ctx.lineTo(canvas.width, canvas.height / 2);
+  ctx.stroke();
+}
+
+class StreamingTTS {
+  constructor(bubble) {
+    this.bubble = bubble;
+    this.buffer = '';
+    this.ctx = getAudioCtx();
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 1024;
+    this.analyser.connect(this.ctx.destination);
+    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    this.nextStartTime = null;
+    this.endTime = null;
+    this.queue = Promise.resolve();
+    this.canvas = null;
+    this.animId = null;
+    this.stopped = false;
   }
 
-  ttsCurrentSource = source;
-  source.start();
-  drawWaveform();
+  feedChunk(chunk) {
+    if (this.stopped) return;
+    this.buffer += chunk;
+    const [sentences, remainder] = extractSentences(this.buffer);
+    this.buffer = remainder;
+    for (const s of sentences) this._enqueue(s);
+  }
 
-  source.onended = () => {
-    cancelAnimationFrame(animId);
-    ttsCurrentSource = null;
-    // Fade out and remove canvas
-    canvas.style.transition = 'opacity 0.5s';
-    canvas.style.opacity = '0';
-    setTimeout(() => canvas.remove(), 500);
-  };
+  flush() {
+    const remainder = this.buffer.trim();
+    this.buffer = '';
+    if (remainder.length >= 2) this._enqueue(remainder);
+    // After all audio is scheduled, stop waveform when last chunk ends
+    this.queue.then(() => {
+      if (this.stopped) return;
+      const delay = this.endTime ? Math.max(0, (this.endTime - this.ctx.currentTime) * 1000) : 0;
+      setTimeout(() => this._stopWaveform(), delay + 200);
+    });
+  }
+
+  stop() {
+    this.stopped = true;
+    try { this.analyser.disconnect(); } catch {}
+    this._stopWaveform();
+  }
+
+  _enqueue(text) {
+    this.queue = this.queue.then(async () => {
+      if (this.stopped) return;
+      try {
+        const res = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        if (!res.ok) return;
+        const wav = await res.arrayBuffer();
+        if (this.stopped) return;
+        const audioBuffer = await this.ctx.decodeAudioData(wav);
+        if (this.stopped) return;
+
+        const source = this.ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(this.analyser);
+
+        const now = this.ctx.currentTime;
+        const startTime = (this.nextStartTime && this.nextStartTime > now)
+          ? this.nextStartTime
+          : now + 0.05;
+        source.start(startTime);
+        this.nextStartTime = startTime + audioBuffer.duration;
+        this.endTime = this.nextStartTime;
+
+        if (!this.canvas) this._startWaveform();
+      } catch (e) { /* ignore individual chunk failures */ }
+    });
+  }
+
+  _startWaveform() {
+    this.canvas = document.createElement('canvas');
+    this.canvas.className = 'waveform';
+    this.canvas.height = 40;
+    this.bubble.appendChild(this.canvas);
+    this.canvas.width = this.canvas.offsetWidth || this.bubble.offsetWidth || 400;
+    scrollToBottom();
+    const loop = () => {
+      if (!this.animId) return;
+      drawWaveformFrame(this.canvas, this.analyser, this.dataArray);
+      this.animId = requestAnimationFrame(loop);
+    };
+    this.animId = requestAnimationFrame(loop);
+  }
+
+  _stopWaveform() {
+    if (this.animId) { cancelAnimationFrame(this.animId); this.animId = null; }
+    if (this.canvas) {
+      this.canvas.style.transition = 'opacity 0.5s';
+      this.canvas.style.opacity = '0';
+      setTimeout(() => this.canvas?.remove(), 500);
+      this.canvas = null;
+    }
+  }
+}
+
+// Used by opener and briefing (full text already available)
+async function speakText(text, messageDiv) {
+  if (!ttsEnabled) return;
+  if (activeTTS) { activeTTS.stop(); activeTTS = null; }
+  const bubble = messageDiv.querySelector('.message-bubble');
+  const tts = new StreamingTTS(bubble);
+  activeTTS = tts;
+  tts.feedChunk(text);
+  tts.flush();
 }
 
 // --- Google auth banner ---
