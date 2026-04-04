@@ -80,7 +80,7 @@ function makeThinkFilter(onChunk) {
   return { processChunk, flush };
 }
 
-export async function articulate(session, onChunk, observations = [], procedural = []) {
+export async function articulate(session, onChunk, observations = [], procedural = [], userModel = null) {
   // Condense chat history if approaching horizon
   const window = new ContextWindow(session.messages, {
     maxChars: CHAT_MAX_CHARS,
@@ -95,6 +95,9 @@ export async function articulate(session, onChunk, observations = [], procedural
   }));
 
   let systemContent = SYSTEM;
+  if (userModel) {
+    systemContent += `\n\n[About this user]\n${userModel}`;
+  }
   if (procedural.length > 0) {
     systemContent += `\n\n[User preferences for your responses]\n${procedural.join('\n')}`;
   }

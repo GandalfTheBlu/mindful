@@ -4,6 +4,7 @@ import { articulate } from './articulate.js';
 import { extract } from './extract.js';
 import { runConsolidation } from '../core/consolidation.js';
 import { listAllItems } from '../core/vectraStore.js';
+import { getUserModel, maybeSynthesizeUserModel } from '../core/userModel.js';
 
 function log(label, data) {
   console.log(`[${new Date().toISOString()}] [pipeline] ${label}`, data ?? '');
@@ -43,7 +44,9 @@ export class CognitivePipeline {
 
     // --- Phase 2: Articulate ---
     log('phase', 'articulate');
-    const assistantContent = await articulate(session, onChunk, observations, procedural);
+    const userModel = getUserModel(userId);
+    if (userModel) log('user-model', `${userModel.length} chars`);
+    const assistantContent = await articulate(session, onChunk, observations, procedural, userModel);
     session.messages.push({ role: 'assistant', content: assistantContent });
 
     // --- Phase 3: Extract ---
@@ -62,6 +65,16 @@ export class CognitivePipeline {
         } catch (err) {
           console.error('[pipeline] consolidation error:', err.message);
         }
+      }
+
+      // --- User model synthesis: run when enough new memories have accumulated ---
+      log('phase', 'user-model-synthesis');
+      try {
+        const finalCount = (await listAllItems(userId)).length;
+        const ran = await maybeSynthesizeUserModel(userId, finalCount);
+        if (!ran) log('user-model-synthesis', 'skipped (below threshold)');
+      } catch (err) {
+        console.error('[pipeline] user-model synthesis error:', err.message);
       }
     }
 
