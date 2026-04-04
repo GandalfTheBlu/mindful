@@ -44,6 +44,7 @@
   "tools": {
     "webSearch": { "maxResults": 5, "jinaApiKeyFile": "C:\\jina\\apikey.txt" },
     "webFetch": { "maxChars": 12000 },
-    "readFile": { "chunkSize": 3000, "overlapSize": 200 }
+    "readFile": { "chunkSize": 3000, "overlapSize": 200 },
+    "fileSystem": { "allowedRoot": "C:\\mind\\workspace" }
   }
 }

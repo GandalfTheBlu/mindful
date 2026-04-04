@@ -24,9 +24,13 @@ export class CognitivePipeline {
     const observations = await recognize(userId, injected, expandedQuery);
     if (observations.length > 0) log('observations', observations);
 
+    const now = new Date();
+    const timestamp = now.toISOString().replace('T', ' ').slice(0, 19);
+    const timestampedContent = `[${timestamp}] ${userContent}`;
+
     const llmContent = injectedFormatted.length > 0
-      ? `${userContent}\n\n[Relevant memories]:\n${injectedFormatted.join('\n')}`
-      : userContent;
+      ? `${timestampedContent}\n\n[Relevant memories]:\n${injectedFormatted.join('\n')}`
+      : timestampedContent;
 
     const userMsg = {
       role: 'user',

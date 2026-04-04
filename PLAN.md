@@ -138,3 +138,72 @@ Changes:
 ```
 
 **Implementation note:** Tool calls handled inline in the streaming response rather than a separate non-streaming pre-pass. `streamOrToolCalls` in `llm.js` accumulates `delta.tool_calls` fragments during streaming; on completion with `finish_reason: tool_calls`, executes tools and starts a new streaming pass. No extra LLM call on turns where no tools are used.
+
+---
+
+## ~~Phase 6: Proactivity — Session Openers & Goal Tracking~~ ✓
+
+**Goal:** Make the system feel temporally continuous — sessions feel connected, and goals stay top of mind without the user having to re-state them.
+
+- **Session opener:** `POST /api/sessions/:id/open` SSE endpoint. On new session creation, fetches goals + recent episodic memories, computes days since last session, asks the LLM to generate a casual 1-2 sentence opening. Skips gracefully if no memories exist.
+- **Stale goal surfacing:** In `recognize.js`, goals not accessed (retrieved by similarity) in >7 days are injected as observations each turn. The model decides whether to mention them based on conversational context.
+- **Interaction:** Goals retrieved by similarity have their `lastAccessed` bumped, so they don't double-surface as stale. The two mechanisms are complementary — similarity retrieval handles relevant turns, staleness handles unrelated turns.
+
+---
+
+## ~~Phase 7: Temporal Grounding & File System Tools~~ ✓
+
+**Goal:** Give the model reliable temporal context and the ability to read/write the local filesystem within a safe boundary.
+
+### Timestamp injection
+
+Every user message's `llmContent` is prefixed with `[YYYY-MM-DD HH:MM:SS]` at pipeline time. The model can now interpret relative time references ("today", "next month", "last week") correctly across all turns.
+
+### File system tools (`src/tools/fileSystem.js`)
+
+Three new tools, all path-guarded against `config.tools.fileSystem.allowedRoot`:
+
+- **`list_directory`** — lists files and subdirectories at a given path
+- **`write_file`** — writes text content to a file, creating parent directories as needed
+- **`create_directory`** — creates a directory tree
+
+Path security: all inputs are resolved with `path.resolve()` and validated to start with the allowed root before any file operation. Access outside the root throws immediately.
+
+Config addition:
+```json
+"fileSystem": { "allowedRoot": "C:\\mind\\workspace" }
+```
+
+---
+
+## Phase 8: Narrative Synthesis — Living User Model
+
+**Goal:** Replace per-turn memory injection (discrete facts) with a maintained, holistic model of the user that captures identity, context, and trajectory. The model should feel like it *knows* you, not just that it recalls facts about you.
+
+### Approach
+
+Maintain a `userModel.md` file per user (stored in `dataDir`) — a free-form prose document summarising who the user is: background, ongoing situation, personality, recurring themes, active goals. This is not a memory — it's a synthesis.
+
+A background synthesis pass runs periodically (e.g. every N new memories, or at session end when memories were extracted). It reads the current user model + all recent memories since the last synthesis, and asks the LLM to produce an updated model document.
+
+The user model is injected into the system prompt on every turn as a dedicated section — more compact than 3 individual memory snippets, more coherent, less dependent on retrieval luck.
+
+**Key decisions:**
+- User model is LLM-written and LLM-maintained — no structured schema, just prose
+- Synthesis prompt receives: current model + new memories since last update
+- Model is versioned by timestamp; old versions discarded (the synthesis is the canonical record)
+- Retrieval-based injection continues alongside — user model covers broad identity, retrieval covers specific facts
+
+---
+
+## Phase 9: Proactive Research
+
+**Goal:** The system does useful work between sessions, not just during them. When the user has active goals, the system researches them autonomously and surfaces findings at the next session opener.
+
+### Approach
+
+A background job (triggered at session end or on a schedule) scans active goals and runs web searches for each. Results are summarised and stored as a special `research` memory type with a TTL (e.g. 3 days — research goes stale). 
+
+The session opener checks for recent research findings and includes them if present: *"While you were away, I looked into X and found..."*
+
+This closes the loop between goal tracking (Phase 6) and tool use (Phase 5) — goals drive autonomous research, research feeds back into the conversation.
