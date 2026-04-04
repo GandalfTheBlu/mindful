@@ -48,3 +48,60 @@
 - **Goals/intentions**: Forward-looking facts. *"User wants to finish their novel by end of year."* Injected when the topic touches on planning or progress.
 - Each type needs its own metadata schema, injection logic, and potentially its own vector index.
 - Extraction prompt (Phase 3) needs to classify each new memory by type.
+
+---
+
+## Phase 5: Tool Use — Web Search & File Reading
+
+**Goal:** Give the LLM agency to actively gather information beyond the conversation: fetch a web page by URL, or read and summarise a local file. Both are implemented as standard tool calls so the model decides when to use them.
+
+### llama-server `--jinja` flag
+
+- `setup_llm.ps1` already passes `config.llm.extraArgs` to `llama-server`.
+- Add `"--jinja"` to `config.json`'s `llm.extraArgs` field. This flag enables Jinja2 chat-template processing, required for tool call formatting on models like Qwen3. No script changes needed.
+
+### Tool call loop — `src/llm.js` + `src/pipeline/articulate.js`
+
+The current flow sends one request and streams the result. With tools, the response may be a `tool_calls` object instead of text content. The new loop:
+
+1. Send messages + tools list to `/v1/chat/completions` (non-streaming).
+2. If response contains `tool_calls`: execute each tool, append `{ role: "tool", content: result }` messages, loop back to step 1.
+3. Once the model returns a plain text response, stream it to the client as today.
+
+Changes:
+- `llm.js`: add `completeWithTools(messages, tools, options)` — handles the non-streaming tool-call turns and returns the final messages array ready for streaming.
+- `articulate.js`: pass tools list to `completeWithTools`, then stream the final response once all tool calls are resolved.
+
+### Tool definitions — `src/tools/`
+
+**`src/tools/webFetch.js`** — fetch a URL as Markdown
+
+- Tool name: `web_fetch`
+- Parameters: `{ url: string }`
+- Fetches `https://r.jina.ai/<url>` (no API key required for public pages; Jina Reader returns clean Markdown).
+- Returns the Markdown string, truncated to a configurable max length to stay within context.
+
+**`src/tools/readFile.js`** — read and summarise a local file
+
+- Tool name: `read_file`
+- Parameters: `{ path: string, task: string }` — `task` is the LLM's description of what it wants to understand from the file.
+- Implementation (hierarchical summarisation):
+  1. Read the file in overlapping chunks (configurable `chunkSize` / `overlapSize` chars).
+  2. For each chunk: call the LLM with a prompt that includes `task` as the relevance lens — *"Summarise only the parts of this chunk relevant to: `<task>`"*.
+  3. Collect all chunk summaries.
+  4. If only one summary, return it directly. Otherwise call the LLM once more to merge all chunk summaries into a final answer shaped by `task`.
+- Returns the final summary string as the tool result.
+
+**`src/tools/index.js`** — registry + dispatcher
+
+- Exports `TOOLS` (OpenAI-format tool definitions array) for inclusion in LLM requests.
+- Exports `callTool(name, args)` — routes `web_fetch` → `webFetch.js`, `read_file` → `readFile.js`. Throws on unknown tool name.
+
+### Config additions (`config.json`)
+
+```json
+"tools": {
+  "webFetch": { "maxChars": 12000 },
+  "readFile": { "chunkSize": 3000, "overlapSize": 200 }
+}
+```
