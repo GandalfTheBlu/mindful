@@ -376,8 +376,35 @@ Once these tools are available, the briefing pipeline should use all of them tog
 2. Calendar events (`get_calendar_events`)
 3. Important mail (`search_mail`)
 4. Open/overdue tasks (`list_tasks`)
-5. Active goals from memory
-6. Recent listening as mood signal (`get_recently_played` — optional, if Spotify configured)
-7. User model for context
+5. Top news of the day — `web_fetch` a public news feed (RSS/Atom or JSON API, no key required), extract headlines + summaries, ask the LLM to pick and summarise the most significant stories
+6. Active goals from memory
+7. Recent listening as mood signal (`get_recently_played` — optional, if Spotify configured)
+8. User model for context
 
-The LLM synthesis call should surface connections across all sources: a calendar event + related task + relevant weather in one note; a goal with an overdue task blocking it; etc.
+The LLM synthesis call should surface connections across all sources: a calendar event + related task + relevant weather in one note; a goal with an overdue task blocking it; a news story relevant to a goal or upcoming event; etc.
+
+---
+
+## Phase 16: Two-Way Communication via Google Tasks
+
+**Goal:** Let the system push information and reminders back to the user through Google Tasks — turning the assistant from a pull-only system into one that can proactively reach the user outside of active sessions.
+
+### Concept
+
+The assistant already reads tasks and creates them on request. The next step is *autonomous* task creation: when the pipeline detects something worth surfacing (a stale goal, an upcoming deadline, a connection between a calendar event and an unfinished task), it writes a task to a dedicated list (e.g. "mindful") so the user sees it in their normal task workflow even when the app isn't open.
+
+### Possible uses
+
+- Stale goal surfacing: if a goal hasn't been discussed in >14 days and has no related open task, auto-create a reminder task
+- Briefing follow-ups: after a briefing, create tasks for any actionable items the model identified
+- Calendar prep: N days before an event connected to a known goal, create a prep task
+
+### Design questions to resolve
+
+- Should autonomous task creation require explicit opt-in (config flag)?
+- Dedicated task list ("mindful") vs. writing to the user's default list?
+- Risk of noise: the model creating tasks the user didn't ask for could be annoying — needs a conservative trigger threshold
+
+---
+
+## Known Issues / TODOs

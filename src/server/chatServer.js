@@ -296,21 +296,21 @@ app.post('/api/sessions/:id/chat', async (req, res) => {
   }
 
   busy = true;
+  let streamDone = false;
 
   try {
     await pipeline.process(
       session,
       content.trim(),
       chunk => send({ type: 'chunk', content: chunk }),
-      label => send({ type: 'status', label })
+      label => send({ type: 'status', label }),
+      () => { streamDone = true; saveSession(session); send({ type: 'done' }); }
     );
-
-    saveSession(session);
-    send({ type: 'done' });
 
   } catch (err) {
     console.error(err);
-    send({ type: 'error', message: err.message });
+    if (!streamDone) send({ type: 'error', message: err.message });
+    else console.error('[chat] post-stream error (already sent done):', err.message);
   } finally {
     busy = false;
     res.end();

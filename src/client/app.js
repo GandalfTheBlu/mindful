@@ -184,6 +184,12 @@ form.addEventListener('submit', async e => {
   const content = inputEl.value.trim();
   if (!content || !currentSession) return;
 
+  // Resume AudioContext on user gesture so TTS plays without delay
+  if (ttsEnabled) {
+    const ctx = getAudioCtx();
+    if (ctx.state === 'suspended') ctx.resume();
+  }
+
   inputEl.value = '';
   inputEl.style.height = 'auto';
   setUiEnabled(false);
@@ -653,8 +659,15 @@ function drawWaveformFrame(canvas, analyser, dataArray) {
   const ctx = canvas.getContext('2d');
   analyser.getByteTimeDomainData(dataArray);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = '#6a9fb5';
-  ctx.lineWidth = 1.5;
+
+  const grad = ctx.createLinearGradient(0, 0, canvas.width, 0);
+  grad.addColorStop(0,    'rgba(255,255,255,0)');
+  grad.addColorStop(0.15, 'rgba(255,255,255,0.35)');
+  grad.addColorStop(0.85, 'rgba(255,255,255,0.35)');
+  grad.addColorStop(1,    'rgba(255,255,255,0)');
+
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 1;
   ctx.beginPath();
   const sliceWidth = canvas.width / dataArray.length;
   let x = 0;
@@ -726,6 +739,8 @@ class StreamingTTS {
         const audioBuffer = await this.ctx.decodeAudioData(wav);
         if (this.stopped) return;
 
+        if (this.ctx.state === 'suspended') await this.ctx.resume();
+
         const source = this.ctx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(this.analyser);
@@ -746,7 +761,7 @@ class StreamingTTS {
   _startWaveform() {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'waveform';
-    this.canvas.height = 40;
+    this.canvas.height = 20;
     this.bubble.appendChild(this.canvas);
     this.canvas.width = this.canvas.offsetWidth || this.bubble.offsetWidth || 400;
     scrollToBottom();
@@ -761,10 +776,11 @@ class StreamingTTS {
   _stopWaveform() {
     if (this.animId) { cancelAnimationFrame(this.animId); this.animId = null; }
     if (this.canvas) {
-      this.canvas.style.transition = 'opacity 0.5s';
-      this.canvas.style.opacity = '0';
-      setTimeout(() => this.canvas?.remove(), 500);
+      const el = this.canvas;
       this.canvas = null;
+      el.style.transition = 'opacity 0.5s';
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 500);
     }
   }
 }

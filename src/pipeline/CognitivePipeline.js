@@ -11,7 +11,7 @@ function log(label, data) {
 }
 
 export class CognitivePipeline {
-  async process(session, userContent, onChunk, onStatus = () => {}) {
+  async process(session, userContent, onChunk, onStatus = () => {}, onStreamDone = () => {}) {
     log('turn:start', userContent.slice(0, 80));
 
     const { userId } = session;
@@ -50,6 +50,9 @@ export class CognitivePipeline {
     if (userModel) log('user-model', `${userModel.length} chars`);
     const assistantContent = await articulate(session, onChunk, observations, procedural, userModel, onStatus);
     session.messages.push({ role: 'assistant', content: assistantContent });
+
+    // Signal to the caller that streaming is done — TTS can flush, UI can re-enable
+    onStreamDone();
 
     // --- Phase 3: Extract ---
     log('phase', 'extract');
