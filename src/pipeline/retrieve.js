@@ -20,20 +20,25 @@ async function expandQuery(userMessagesText, userContent) {
   return response.trim() || userContent;
 }
 
+// Minimum cosine score for a candidate to reach the filter LLM.
+// Sits above the store-level minSimilarity noise floor; configurable via memory.retrieveMinScore.
+const RETRIEVE_MIN_SCORE = () => config.memory.retrieveMinScore ?? 0.6;
+
 const FILTER_SYSTEM = `/no_think
-You are given a conversation context and numbered candidate memories. Output ONLY the numbers of memories that directly relate to the topic at hand and would meaningfully change the response. Memories that merely share a subject area do not qualify. Be conservative — if in doubt, exclude. Output comma-separated numbers only. If none qualify, output nothing.`;
+You are given a user message and numbered candidate memories with their similarity scores (0–1). Output ONLY the numbers of memories that provide specific information directly needed to respond well to this exact message — not merely about the same subject area.
+
+Ask yourself: would the response be noticeably more accurate or personal with this memory than without it? If the answer is not clearly yes, exclude it.
+
+Be strict. Scores below 0.70 require clear justification to include. Output comma-separated numbers only. If none qualify, output nothing.`;
 
 export async function retrieve(session, userContent) {
   const { retrievalWindowChars, maxInjectedMemories } = config.memory;
-
   const { uncertainThreshold } = config.confidence ?? { uncertainThreshold: 0.5 };
 
-  // Build deduplication set from memories already explicitly injected into context
   const alreadyInContext = new Set(
     session.messages.flatMap(m => m.injectedMemories ?? [])
   );
 
-  // --- Targeted retrieval ---
   const userMessagesText = session.messages
     .filter(m => m.role === 'user')
     .map(m => m.content)
@@ -47,15 +52,20 @@ export async function retrieve(session, userContent) {
   if (userContent.trim().length >= 20) {
     expandedQuery = await expandQuery(userMessagesText, userContent);
     log('expanded-query', expandedQuery);
-    const candidates = await queryMemories(userId, expandedQuery, maxInjectedMemories);
-    log('candidates', candidates.length > 0 ? candidates : '(none)');
+
+    // Fetch a wider pool, then hard-threshold on score before the LLM filter.
+    // This gives the filter better candidates and cuts noise that merely shares vocabulary.
+    const pool = await queryMemories(userId, expandedQuery, maxInjectedMemories * 4);
+    const candidates = pool.filter(c => (c.score ?? 0) >= RETRIEVE_MIN_SCORE());
+    log('candidates', `${pool.length} fetched, ${candidates.length} above score threshold`);
+    if (candidates.length > 0) log('candidate-list', candidates.map(c => `[${c.score?.toFixed(2)}] ${c.text}`));
 
     if (candidates.length > 0) {
-      const numbered = candidates.map((c, i) => `${i + 1}. ${c.text}`).join('\n');
+      const numbered = candidates.map((c, i) => `${i + 1}. [score:${c.score?.toFixed(2)}] ${c.text}`).join('\n');
       const response = await complete(
         [
           { role: 'system', content: FILTER_SYSTEM },
-          { role: 'user', content: `User message: ${userContent}\n\nMemories:\n${numbered}` }
+          { role: 'user', content: `User message: ${userContent}\n\nCandidates:\n${numbered}` }
         ],
         { max_tokens: config.memory.maxTokens }
       );
@@ -65,7 +75,10 @@ export async function retrieve(session, userContent) {
         .map(n => parseInt(n) - 1)
         .filter(i => i >= 0 && i < candidates.length);
 
-      injected = indices.map(i => candidates[i]).filter(c => !alreadyInContext.has(c.text));
+      injected = indices
+        .map(i => candidates[i])
+        .filter(c => !alreadyInContext.has(c.text))
+        .slice(0, maxInjectedMemories);
     }
   }
 

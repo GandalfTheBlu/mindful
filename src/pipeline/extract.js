@@ -35,6 +35,22 @@ Rules:
     - "goal" — something the user intends to do or achieve in the future.
 - Output only the statements with labels, nothing else.`;
 
+// Tools whose results contain only transient data — skip extraction entirely.
+const TRANSIENT_TOOLS = new Set(['get_weather', 'get_currently_playing']);
+
+const EXTRACT_TOOLS_SYSTEM = `/no_think
+You are given tool results retrieved during a conversation. Extract only durable facts about the user that would be worth remembering in future sessions — weeks or months from now.
+
+Rules:
+- ONLY extract recurring patterns, preferences, or ongoing responsibilities. Skip one-off events, today's news, current weather, or anything tied to a specific date.
+- Good candidates: a music artist the user listens to frequently, a recurring calendar event that reveals their schedule or role, a task that suggests an ongoing project or responsibility, a research topic that reveals an interest.
+- Poor candidates: a meeting tomorrow at 3pm, today's weather, a single email subject line, the currently playing track.
+- Each statement must start with "The user".
+- Each statement must be fully self-contained — no pronouns or context-dependent references.
+- Append " | <confidence> | <type>" where confidence is high/medium/low and type is semantic/episodic/procedural/goal.
+- If there are no durable facts worth extracting, output <NOTHING>.
+- Output only the statements, nothing else.`;
+
 // Question-only messages can never contain extractable personal facts.
 // Guard against the small model hallucinating from injected context.
 const QUESTION_ONLY = /^(what|who|where|when|why|how|can|could|do|does|did|is|are|was|were|will|would|should|have|has)\b/i;
@@ -97,6 +113,58 @@ export async function extract(userContent, precedingMessages, userId) {
     log('result', `${dated} (confidence: ${confidence}, type: ${type})`);
     await addMemory(userId, dated, confidence, type);
     log('stored', dated);
+    stored.push(dated);
+  }
+
+  return stored;
+}
+
+// Extracts durable facts from tool results collected during articulation.
+// toolResults: array of { name, result } from the tool-call loop.
+export async function extractFromToolResults(toolResults, userId) {
+  const relevant = toolResults.filter(t => !TRANSIENT_TOOLS.has(t.name));
+  if (relevant.length === 0) return [];
+
+  // Truncate each result to avoid blowing context — tool results can be very long.
+  const MAX_RESULT_CHARS = 600;
+  const formatted = relevant
+    .map(t => `[${t.name}]\n${String(t.result).slice(0, MAX_RESULT_CHARS)}`)
+    .join('\n\n');
+
+  log('tool-extract-input', `${relevant.length} tool(s): ${relevant.map(t => t.name).join(', ')}`);
+
+  const response = await complete(
+    [
+      { role: 'system', content: EXTRACT_TOOLS_SYSTEM },
+      { role: 'user', content: formatted }
+    ],
+    { max_tokens: config.memory.maxTokens }
+  );
+
+  if (response.includes('<NOTHING>')) {
+    log('tool-extract-result', '(nothing)');
+    return [];
+  }
+
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const lines = response
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.startsWith('The user'));
+
+  if (lines.length === 0) return [];
+
+  const stored = [];
+  for (const line of lines) {
+    const parts = line.split(' | ');
+    const fact = parts[0].trim();
+    const label = (parts[1] ?? 'medium').trim().toLowerCase();
+    const typeRaw = (parts[2] ?? 'semantic').trim().toLowerCase();
+    const confidence = CONFIDENCE_MAP[label] ?? 0.6;
+    const type = VALID_TYPES.has(typeRaw) ? typeRaw : 'semantic';
+    const dated = `${fact} [${now}]`;
+    log('tool-extract-result', `${dated} (confidence: ${confidence}, type: ${type})`);
+    await addMemory(userId, dated, confidence, type);
     stored.push(dated);
   }
 

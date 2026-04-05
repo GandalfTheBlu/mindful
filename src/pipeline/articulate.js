@@ -113,6 +113,7 @@ export async function articulate(session, onChunk, observations = [], procedural
 
   let currentMessages = [{ role: 'system', content: systemContent }, ...llmMessages];
   let responseContent = '';
+  const allToolResults = [];
   const maxToolIterations = 10;
   let toolIterations = 0;
 
@@ -156,9 +157,10 @@ export async function articulate(session, onChunk, observations = [], procedural
         result = `Error: ${err.message}`;
       }
       log('tool-result', `${tc.name} → ${String(result).slice(0, 120)}`);
+      allToolResults.push({ name: tc.name, result: String(result) });
       currentMessages.push({ role: 'tool', content: String(result), tool_call_id: tc.id });
     }
   }
 
-  return responseContent;
+  return { content: responseContent, toolResults: allToolResults };
 }

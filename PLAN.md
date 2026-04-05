@@ -487,4 +487,55 @@ The web research agent fetches news pages that mix fresh stories with older cont
 - **Recurrence score gate** — `recognize.js` now uses `searchMemories` (returns scores) for the broad candidate fetch. Only memories scoring above `patternRecognition.recurrenceMinScore` (default 0.6) count toward the recurrence threshold. Prevents a sparse store dominated by one topic from firing recurrence observations on every unrelated turn.
 - **Filter context = current message** — the post-retrieval filter LLM call now receives only the current user message as context, not all prior user messages. The filter question is "relevant to *this* message?" not "relevant to the session in general?"
 
+---
+
+## Phase 20: Tool Result Memory Integration
+
+**Goal:** Valuable user information returned by tools — calendar events, emails, tasks, Spotify listening — is currently consumed by the LLM for the immediate response and then discarded. It should feed the memory and user model systems the same way conversation content does.
+
+### The problem
+`extract.js` only processes the human–assistant turn exchange. Tool results pass through `articulate.js` as transient `tool` role messages and are never seen by the extraction pipeline. Information like "user has a meeting with their manager on Friday" or "user has been listening to X artist heavily this week" is relevant to future sessions but is silently dropped.
+
+### Approach
+- After a tool-call turn completes, pass the tool results alongside the final assistant response into the extraction pipeline.
+- Tool results need different extraction treatment than conversation: they are structured data, often noisy (long email bodies, full calendar lists). A pre-filter step should strip noise before extraction — e.g. only extract from tool results that the LLM actually referenced in its response.
+- A relevance gate: only attempt extraction from tool results whose content the model drew on (detectable by checking whether key terms from the result appear in the assistant's response).
+- Consider a separate extraction prompt tuned for structured data rather than reusing the conversational memory extractor.
+
+### Open questions
+- Should extracted tool memories be tagged with their source tool (e.g. `source: calendar`) so they can be weighted or filtered differently?
+- How do we avoid cluttering the store with transient facts (e.g. "it is raining today") vs. durable ones (e.g. "user has a recurring Thursday standup")?
+
+---
+
+## Phase 21: LLM-Defined Sub-Agents
+
+**Goal:** Allow the LLM to spawn a sub-agent with a custom system prompt it writes itself, enabling it to delegate structured subtasks to a focused agent — generalising the pattern already used by `webResearch` and `deepResearch`.
+
+### The idea
+There is an interesting inflection point in any programmable system when it gains the ability to construct and invoke instances of itself. We already have this implicitly: `webResearch` is a hard-coded agent loop with a fixed system prompt. The step here is to make the system prompt a parameter the main LLM writes at runtime.
+
+This would be a `run_agent` tool:
+```
+run_agent(systemPrompt, task, tools[])
+```
+The main LLM writes a focused system prompt for a sub-agent, specifies the task, and optionally restricts which tools the sub-agent can use. The sub-agent runs its own tool-call loop and returns a result.
+
+### Why this is interesting
+- The main LLM can create specialists on demand — a "strict fact-checker" sub-agent, a "calendar conflict detector", a "summarise this document for a non-expert" agent — without those being hard-coded.
+- Ties directly into self-improvement: the system could run a sub-agent tasked with critiquing the current conversation and proposing a better response.
+- Opens up multi-step delegation: the main LLM decomposes a task, the sub-agent executes it, the result feeds back.
+
+### Risks and constraints
+- **Prompt injection**: a sub-agent system prompt written by the LLM could itself be manipulated if the task content is adversarial. The tool should sanitise or sandbox the system prompt.
+- **Infinite recursion**: a sub-agent must not have access to `run_agent` itself, or must have a strict depth limit.
+- **Cost**: each sub-agent invocation is a full LLM loop. Should be reserved for tasks that genuinely benefit from isolation, not used speculatively.
+- **Auditability**: the sub-agent's system prompt and full turn log should be surfaced to the user (or at least logged) — the system should not do hidden reasoning the user cannot inspect.
+- Start with read-only tools only for sub-agents until the pattern is well-understood.
+
+### Connection to Phase 18 (Self-Improvement)
+A sub-agent with a "reflect on this conversation and identify what the system got wrong" system prompt is a concrete implementation of the reflection mechanism in Phase 18 — and it avoids the main LLM having to simultaneously converse and introspect.
+
+---
+
 ## Known Issues / TODOs

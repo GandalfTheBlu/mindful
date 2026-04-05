@@ -20,6 +20,7 @@
     "maxInjectedMemories": 3,
     "maxTokens": 256,
     "minSimilarity": 0.5,
+    "retrieveMinScore": 0.6,
     "episodicDecay": 0.05
   },
   "consolidation": {

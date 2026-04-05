@@ -1,7 +1,7 @@
 import { retrieve } from './retrieve.js';
 import { recognize } from './recognize.js';
 import { articulate } from './articulate.js';
-import { extract } from './extract.js';
+import { extract, extractFromToolResults } from './extract.js';
 import { runConsolidation } from '../core/consolidation.js';
 import { listAllItems } from '../core/vectraStore.js';
 import { getUserModel, getUserModelSummary, maybeSynthesizeUserModel } from '../core/userModel.js';
@@ -49,7 +49,7 @@ export class CognitivePipeline {
     const userModelFull = getUserModel(userId);
     const userModelSummary = getUserModelSummary(userId);
     if (userModelFull) log('user-model', `${userModelFull.length} chars, injected=${injected.length > 0 ? 'summary-only' : 'full'}`);
-    const assistantContent = await articulate(session, onChunk, observations, procedural, userModelSummary, userModelFull, injected.length, onStatus);
+    const { content: assistantContent, toolResults } = await articulate(session, onChunk, observations, procedural, userModelSummary, userModelFull, injected.length, onStatus);
     session.messages.push({ role: 'assistant', content: assistantContent });
 
     // Signal to the caller that streaming is done — TTS can flush, UI can re-enable
@@ -59,8 +59,12 @@ export class CognitivePipeline {
     log('phase', 'extract');
     onStatus('Extracting memories...');
     const countBefore = (await listAllItems(userId)).length;
-    const extracted = await extract(userContent, session.messages.slice(0, -2), userId);
-    userMsg.extractedMemories = extracted;
+    const [extracted, extractedFromTools] = await Promise.all([
+      extract(userContent, session.messages.slice(0, -2), userId),
+      toolResults.length > 0 ? extractFromToolResults(toolResults, userId) : Promise.resolve([])
+    ]);
+    if (extractedFromTools.length > 0) log('tool-memories', extractedFromTools);
+    userMsg.extractedMemories = [...extracted, ...extractedFromTools];
 
     if (extracted.length > 0) {
       onStatus(`Storing ${extracted.length} ${extracted.length === 1 ? 'memory' : 'memories'}...`);

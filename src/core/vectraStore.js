@@ -80,7 +80,7 @@ export async function queryMemories(userId, text, topK) {
     await index.endUpdate();
   }
 
-  return hits.map(({ r }) => ({ text: r.item.metadata.text, confidence: r.item.metadata.confidence ?? 1.0, type: r.item.metadata.type ?? 'semantic' }));
+  return hits.map(({ r, adjustedScore }) => ({ text: r.item.metadata.text, score: adjustedScore, confidence: r.item.metadata.confidence ?? 1.0, type: r.item.metadata.type ?? 'semantic' }));
 }
 
 export async function listAllMemories(userId) {
