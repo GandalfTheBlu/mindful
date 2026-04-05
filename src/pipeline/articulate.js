@@ -141,7 +141,7 @@ export async function articulate(session, onChunk, observations = [], procedural
 
   // Turn-local context passed to every tool call.
   // listedDirs resets each turn; fileCache persists in session across turns.
-  const toolContext = { listedDirs: new Set(), session };
+  const toolContext = { listedDirs: new Set(), session, userId: session.userId };
 
   while (true) {
     const filter = makeThinkFilter(onChunk);

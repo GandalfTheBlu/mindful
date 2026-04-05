@@ -430,26 +430,17 @@ The web research agent fetches news pages that mix fresh stories with older cont
 
 ---
 
-## Phase 17: Learning-Oriented Briefing
+## ~~Phase 17: Learning Session~~ ✓
 
-**Goal:** Extend the daily briefing with a curated learning section — the LLM identifies topics worth exploring given the user's goals and interests, then researches concrete, high-quality resources for each.
+**Goal:** A dedicated learning mode that proposes trajectory-based topics, then lets the user steer a research session that persists findings to a structured learning library.
 
-### Approach
-
-After the existing briefing data is gathered, an additional pipeline step runs:
-
-1. **Topic derivation** — a small LLM call reads the user model, active goals, and recent memories, and outputs 1-3 specific learning topics the user might benefit from exploring right now. Topics should be concrete and actionable (e.g. "tournament footwork drills for HEMA longsword" or "music theory: voice leading") rather than vague ("learn something new").
-
-2. **Resource research** — for each topic, a `webResearch` agent searches for the best available resources: YouTube tutorials or series, well-regarded blog posts, active forums or subreddits, documentation or books. The agent is instructed to prefer resources that are: recent, highly regarded, and appropriate for the user's apparent level.
-
-3. **Briefing section** — the synthesis LLM includes a compact "Learning picks" section: one sentence per topic naming the resource and why it's relevant to the user's current trajectory.
-
-### Design decisions
-
-- Topic derivation reuses the same LLM + `complete()` pattern as `deriveEventTopic` — fast and cheap.
-- Each topic gets its own `webResearch` call, run in parallel.
-- The section is omitted from the briefing if no meaningful topics are derived or no good resources are found.
-- Configurable: `tools.briefing.learningTopics` (default 2) controls how many topics are researched per briefing.
+**Implemented:**
+- **Learning button** in the chat header — fires `POST /api/sessions/:id/learn`, streams topic proposals into the current chat, then regular chat continues with learning tools available.
+- **`runLearningProposal`** — reads structured user model sections (Current Projects, Goals, Interests) + recent learning entries to propose 3 specific topics, avoiding recently covered ground. Falls back gracefully when no user model exists yet.
+- **`src/tools/learningStore.js`** — structured learning API: `save_learning_entry`, `list_learning_entries`, `link_entries`, `log_session`. Writes to `C:\mind\learning\{userId}\` — separate from the workspace the LLM can freely write to. Each entry produces a JSON index record and a human-readable markdown file. The LLM never manages paths or file structure directly.
+- **`deep_research` tool** — wraps `webResearch` with a higher iteration budget (`learning.deepResearchIterations`, default 10) for thorough resource-quality research.
+- All learning tools available in every chat session — user can ask to save a learning note from any conversation.
+- Config: `learning.dataDir`, `learning.deepResearchIterations`.
 
 ---
 

@@ -14,6 +14,7 @@ const form = document.getElementById('input-form');
 const btnSend = document.getElementById('btn-send');
 const btnNew = document.getElementById('btn-new');
 const btnSave = document.getElementById('btn-save');
+const btnLearn = document.getElementById('btn-learn');
 const btnBrief = document.getElementById('btn-brief');
 const btnTts = document.getElementById('btn-tts');
 const chatTitle = document.getElementById('chat-title');
@@ -274,6 +275,85 @@ form.addEventListener('submit', async e => {
 });
 
 // --- Briefing ---
+btnLearn.addEventListener('click', async () => {
+  if (!currentSession) return;
+  if (ttsEnabled) { const ctx = getAudioCtx(); if (ctx.state === 'suspended') ctx.resume(); }
+  setUiEnabled(false);
+  btnLearn.textContent = 'Loading…';
+
+  const assistantDiv = document.createElement('div');
+  assistantDiv.className = 'message assistant';
+  const statusEl = document.createElement('div');
+  statusEl.className = 'stream-status';
+  const bubble = document.createElement('div');
+  bubble.className = 'message-bubble';
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  bubble.appendChild(cursor);
+  assistantDiv.appendChild(statusEl);
+  assistantDiv.appendChild(bubble);
+  messages.appendChild(assistantDiv);
+  scrollToBottom();
+
+  const res = await fetch(`/api/sessions/${currentSession.id}/learn`, { method: 'POST' });
+
+  if (!res.ok) {
+    const err = await res.json();
+    bubble.textContent = `Error: ${err.error}`;
+    setUiEnabled(true);
+    btnLearn.textContent = 'Learning';
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let streamedText = '';
+
+  if (activeTTS) { activeTTS.stop(); activeTTS = null; }
+  const learnTTS = ttsEnabled ? new StreamingTTS(bubble) : null;
+  if (learnTTS) activeTTS = learnTTS;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const event = JSON.parse(line.slice(6));
+      if (event.type === 'status') {
+        statusEl.textContent = event.label;
+      } else if (event.type === 'chunk') {
+        statusEl.remove();
+        streamedText += event.content;
+        bubble.innerHTML = renderBold(streamedText);
+        bubble.appendChild(cursor);
+        if (learnTTS) learnTTS.feedChunk(event.content);
+        scrollToBottom();
+      } else if (event.type === 'done') {
+        cursor.remove();
+        if (learnTTS) learnTTS.flush();
+        if (event.generated) {
+          currentSession = await api('GET', `/api/sessions/${currentSession.id}`);
+        } else {
+          if (learnTTS) learnTTS.stop();
+          assistantDiv.remove();
+        }
+        setUiEnabled(true);
+        btnLearn.textContent = 'Learning';
+      } else if (event.type === 'error') {
+        cursor.remove();
+        if (learnTTS) learnTTS.stop();
+        bubble.textContent = `Error: ${event.message}`;
+        setUiEnabled(true);
+        btnLearn.textContent = 'Learning';
+      }
+    }
+  }
+});
+
 btnBrief.addEventListener('click', async () => {
   if (!currentSession) return;
   if (ttsEnabled) { const ctx = getAudioCtx(); if (ctx.state === 'suspended') ctx.resume(); }
@@ -497,6 +577,7 @@ function setUiEnabled(enabled) {
   inputEl.disabled = !enabled;
   btnSend.disabled = !enabled;
   btnSave.disabled = !enabled || !currentSession;
+  btnLearn.disabled = !enabled || !currentSession;
   btnBrief.disabled = !enabled || !currentSession;
   if (enabled) inputEl.focus();
 }

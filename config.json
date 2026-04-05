@@ -64,5 +64,9 @@
     "weather": { "lat": 58.41, "lon": 15.62 },
     "briefing": { "city": "Linköping", "country": "Sweden", "region": "Europe" },
     "webResearch": { "maxIterations": 6 }
+  },
+  "learning": {
+    "dataDir": "C:\\mind\\learning",
+    "deepResearchIterations": 10
   }
 }

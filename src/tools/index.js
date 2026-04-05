@@ -1,4 +1,5 @@
 import { webResearch } from './webResearch.js';
+import { deepResearch } from './deepResearch.js';
 import { readFile } from './readFile.js';
 import { listDirectory, writeFile, createDirectory } from './fileSystem.js';
 import { getCalendarEvents } from './googleCalendar.js';
@@ -6,8 +7,86 @@ import { searchMail } from './googleMail.js';
 import { listTasks, createTask, completeTask } from './googleTasks.js';
 import { getWeather } from './weather.js';
 import { getRecentlyPlayed, getTopArtists, getCurrentlyPlaying } from './spotify.js';
+import { saveLearningEntry, listLearningEntries, linkEntries, logSession } from './learningStore.js';
 
 export const TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'deep_research',
+      description: 'Conduct thorough multi-step web research on a topic, going deeper than web_research. Use this during a learning session to find high-quality resources, tutorials, documentation, or community discussions on a specific topic. Returns a detailed synthesised answer.',
+      parameters: {
+        type: 'object',
+        properties: {
+          topic: { type: 'string', description: 'The topic to research.' },
+          goal:  { type: 'string', description: 'What specifically to find — e.g. the best tutorial, official documentation, community reception, practical entry point for someone at a given level.' }
+        },
+        required: ['topic', 'goal']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'save_learning_entry',
+      description: 'Save a learning entry to the user\'s personal learning library after researching a topic. Call this once you have researched a topic and are ready to record the findings.',
+      parameters: {
+        type: 'object',
+        properties: {
+          topic:         { type: 'string', description: 'Concise topic name.' },
+          source:        { type: 'object', description: 'Best resource found: { title, url, type } where type is e.g. "documentation", "tutorial", "video", "community".' },
+          keyConcepts:   { type: 'array', items: { type: 'string' }, description: 'Key concepts or takeaways (3–6 bullet points).' },
+          entryPoint:    { type: 'string', description: 'The specific starting point recommended for the user — a chapter, section, video timestamp, or first exercise.' },
+          relevance:     { type: 'string', description: 'One or two sentences on why this is useful for the user right now, tied to a specific project or goal.' },
+          linkedProjects:{ type: 'array', items: { type: 'string' }, description: 'Names of current projects this topic connects to.' }
+        },
+        required: ['topic', 'keyConcepts', 'entryPoint', 'relevance']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_learning_entries',
+      description: "List the user's recent learning entries. Use this to avoid re-covering recently explored topics, or to find entries to cross-reference.",
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'Number of recent entries to return (default 10).' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'link_entries',
+      description: 'Record a connection between two learning entries. Use this when you notice a meaningful relationship between two topics.',
+      parameters: {
+        type: 'object',
+        properties: {
+          idA:            { type: 'string', description: 'ID of the first entry (from list_learning_entries).' },
+          idB:            { type: 'string', description: 'ID of the second entry.' },
+          connectionNote: { type: 'string', description: 'One sentence describing the connection.' }
+        },
+        required: ['idA', 'idB', 'connectionNote']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'log_session',
+      description: 'Log the completed learning session with the entry IDs created. Call this at the end of a learning session.',
+      parameters: {
+        type: 'object',
+        properties: {
+          entryIds: { type: 'array', items: { type: 'string' }, description: 'IDs of entries created or revisited in this session.' },
+          notes:    { type: 'string', description: 'Optional brief notes about the session.' }
+        }
+      }
+    }
+  },
   {
     type: 'function',
     function: {
@@ -208,6 +287,11 @@ export const TOOLS = [
 ];
 
 export async function callTool(name, args, context = {}) {
+  if (name === 'deep_research')       return String(await deepResearch(args));
+  if (name === 'save_learning_entry') return String(saveLearningEntry(context.userId, args));
+  if (name === 'list_learning_entries') return String(listLearningEntries(context.userId, args));
+  if (name === 'link_entries')        return String(linkEntries(context.userId, args));
+  if (name === 'log_session')         return String(logSession(context.userId, args));
   if (name === 'web_research') return String(await webResearch(args));
   if (name === 'read_file') return String(await readFile(args, context));
   if (name === 'list_directory') return String(await listDirectory(args, context));
