@@ -292,7 +292,7 @@ This is also useful for debugging — gives the same signal as watching server l
 
 ---
 
-## Phase 13: Episodic Re-ranking
+## ~~Phase 13: Episodic Re-ranking~~ ✓
 
 **Goal:** Make episodic memory retrieval time-aware, so recent events rank higher than old ones when both are semantically similar.
 

@@ -19,7 +19,8 @@
     "retrievalWindowChars": 1000,
     "maxInjectedMemories": 3,
     "maxTokens": 256,
-    "minSimilarity": 0.5
+    "minSimilarity": 0.5,
+    "episodicDecay": 0.05
   },
   "consolidation": {
     "decayAgeDays": 14,
