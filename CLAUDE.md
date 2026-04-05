@@ -1,5 +1,11 @@
 # mindful
 
+## CRITICAL RULE — Prompts Must Stay General
+
+**When writing or editing any LLM prompt string or code comment containing an example:** express everything in abstract terms. Never use specific details drawn from the current task, the conversation, or what you know about the user (their name, interests, tools, goals, habits, domain knowledge, etc.). Write for the class of problem, not the instance in front of you. This applies to inline comments, docstrings, and prompt strings equally.
+
+---
+
 ## Project Overview
 
 A system for managing coherent context for locally-run LLMs, across context limits and across sessions.

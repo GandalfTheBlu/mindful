@@ -22,6 +22,31 @@ function parseArtistNames(text) {
   return names;
 }
 
+// Ask the LLM to derive 2–3 specific interest areas for seeding news searches.
+// Returns a comma-separated string like "competitive fencing, audio engineering" or null.
+async function deriveNewsInterests(goals, userModel) {
+  const parts = [];
+  if (goals.length > 0) parts.push(`Goals:\n${goals.map(g => `- ${g}`).join('\n')}`);
+  if (userModel) parts.push(`User summary:\n${userModel}`);
+  if (parts.length === 0) return null;
+
+  const prompt = `/no_think
+Based on the interests, goals, and background below, identify 2–3 specific topics this person would find most relevant in a daily news briefing. Focus on substantive interest areas (fields, communities, industries, issues) — not generic categories like "technology" or "sports". Output only a short comma-separated list. If no clear interests are present, output "none".
+
+${parts.join('\n\n')}`;
+
+  try {
+    const raw = await complete([{ role: 'user', content: prompt }], { max_tokens: 40, temperature: 0 });
+    const interests = raw.replace(/^["'\s]+|["'\s]+$/g, '').toLowerCase();
+    if (!interests || interests === 'none' || interests.length < 3) return null;
+    log('news-interests', interests);
+    return interests;
+  } catch (err) {
+    log('news-interests-error', err.message);
+    return null;
+  }
+}
+
 // Ask the LLM to derive a compact event search topic from goals and user model.
 // Returns a short phrase like "photography workshop" or null if nothing relevant.
 async function deriveEventTopic(goals, userModel) {
@@ -47,11 +72,24 @@ ${parts.join('\n\n')}`;
   }
 }
 
+function buildWorldNewsGoal(today, interests) {
+  const interestClause = interests
+    ? ` Also look for stories relevant to: ${interests}.`
+    : '';
+  return `Find the most significant world news stories published today (${today}). For each story you include, you MUST confirm and state the exact publication date from the source — discard any story whose date cannot be verified. State exactly what happened: name the specific people, organisations, countries, and concrete outcomes. Do not use vague phrases.${interestClause} Cover 4–6 stories.`;
+}
+
+function buildLocalNewsGoal(city, country, today, interests) {
+  const loc = country ? `${city}, ${country}` : city;
+  const interestClause = interests ? ` Also look for stories relevant to: ${interests}.` : '';
+  return `Find local news from ${loc} published today (${today}) or within the last 24 hours. For each story confirm and state the publication date — discard any story whose date cannot be verified from the source. State what specifically happened, naming the people, places, and decisions involved.${interestClause} Cover 3–4 stories.`;
+}
+
 function buildBriefingSystem(region) {
   return `/no_think
 You are generating a daily briefing for a user. Using the provided context, write a focused briefing (6–10 sentences). Guidelines:
 
-- For each news story, always include the date it occurred (e.g. "April 5 —"). Prioritise the most recent stories; if a story lacks a clear date, deprioritise it. State what specifically happened: name the people, organisations, places, and concrete outcomes. Avoid vague phrases like "tensions rise" or "officials respond" — write the actual event.
+- For each news story, state the confirmed publication date (e.g. "April 5 —") before anything else. Omit any story whose date was not confirmed in the research — do not guess or infer dates from context. State what specifically happened: name the people, organisations, places, and concrete outcomes. Avoid vague phrases like "tensions rise" or "officials respond" — write the actual event.
 - Highlight calendar events worth noting, especially those connected to goals or tasks.
 - Surface tasks that are overdue or due soon; skip the routine ones unless they connect to something else.
 - Surface emails that are genuinely important or actionable; skip promotions and newsletters.
@@ -77,9 +115,19 @@ export async function runBriefing(session, onChunk, onStatus = () => {}) {
   // Convenience: create a prefixed onStatus forwarder for each research task
   const statusFor = prefix => label => onStatus(`${prefix}: ${label}`);
 
+  const today = new Date().toISOString().slice(0, 10);
+
+  // --- Pre-phase: fetch user profile (fast/local) to seed news searches ---
+  const [goals, userModel] = await Promise.all([
+    listByType(userId, 'goal'),
+    Promise.resolve(getUserModel(userId))
+  ]);
+  const newsInterests = await deriveNewsInterests(goals, userModel);
+  log('news-interests', newsInterests ?? '(none)');
+
   // --- Phase 1: fetch all context data and run news research in parallel ---
   onStatus('Data: Fetching...');
-  const [calendarText, mailText, tasksText, weatherText, newsText, localNewsText, spotifyText, goals, userModel] = await Promise.all([
+  const [calendarText, mailText, tasksText, weatherText, newsText, localNewsText, spotifyText] = await Promise.all([
     googleConfigured
       ? getCalendarEvents({ days: 7, maxResults: 20 }).catch(err => `(unavailable: ${err.message})`)
       : Promise.resolve(null),
@@ -94,19 +142,17 @@ export async function runBriefing(session, onChunk, onStatus = () => {}) {
       : Promise.resolve(null),
     webResearch({
       topic: 'top world news today',
-      goal: `Find the most significant world news stories from today (${new Date().toISOString().slice(0,10)}). For each story include the date it was published, then state exactly what happened: name the specific people, organisations, countries, and concrete outcomes. Do not use vague phrases. Prioritise the freshest stories. Cover 5-6 stories.`
+      goal: buildWorldNewsGoal(today, newsInterests)
     }, statusFor('World news')).catch(err => { log('news-error', err.message); return null; }),
     city
       ? webResearch({
           topic: `local news ${city} today`,
-          goal: `Find the latest local news from ${city}${country ? `, ${country}` : ''}. For each story state what specifically happened, naming the people, places, and decisions involved. Cover 3-4 stories.`
+          goal: buildLocalNewsGoal(city, country, today, newsInterests)
         }, statusFor(`${city} news`)).catch(err => { log('local-news-error', err.message); return null; })
       : Promise.resolve(null),
     spotifyConfigured
       ? getTopArtists({ timeRange: 'short_term', limit: 10 }).catch(err => { log('spotify-error', err.message); return null; })
       : Promise.resolve(null),
-    listByType(userId, 'goal'),
-    Promise.resolve(getUserModel(userId))
   ]);
 
   onStatus('Data: ✓');

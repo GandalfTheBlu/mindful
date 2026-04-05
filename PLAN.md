@@ -407,7 +407,7 @@ The assistant already reads tasks and creates them on request. The next step is 
 
 ---
 
-## Phase 16: News Freshness and Date Accuracy
+## ~~Phase 16: News Freshness and Date Accuracy~~ ✓
 
 **Goal:** Ensure the briefing only surfaces genuinely current news — no stories mislabelled as today's when they are hours or days old.
 
@@ -422,10 +422,11 @@ The web research agent fetches news pages that mix fresh stories with older cont
 - **Source preference** — prefer results from news aggregators (Google News, AP, Reuters) that expose clear publication timestamps in their search snippets, rather than article pages where dates are buried or absent.
 - **Briefing synthesis instruction** — add an explicit rule to `buildBriefingSystem` requiring the model to omit any story it cannot attribute a confirmed date to, rather than guessing or inheriting the query date.
 
-### Open Questions
-
-- Should stale stories be dropped silently or surfaced with a "recent but not today" label?
-- Is a second LLM pass to filter stories worth the latency cost, or should the research agent handle it?
+**Implemented:**
+- Research goals for world news and local news now require each story's publication date to be confirmed from the source — stories with unverifiable dates are discarded by the agent.
+- Synthesis prompt rule changed from "deprioritise undated stories" to "omit any story whose date was not confirmed in the research."
+- `deriveNewsInterests()` — a small LLM call that reads the user's goals + user model and returns 2–3 specific interest areas. These are injected into both the world news and local news research goals so the agent surfaces stories relevant to the user's actual interests.
+- Goals + user model are now fetched before the parallel data batch so interests are available to seed the news research from the start.
 
 ---
 
