@@ -3,7 +3,17 @@ import config from './config.js';
 const llmBase = `http://${config.llm.serverHost}:${config.llm.port}`;
 const embeddingBase = `http://${config.embedding.serverHost}:${config.embedding.port}`;
 
-export async function complete(messages, options = {}) {
+// Serialise all complete() calls so concurrent briefing tasks don't
+// flood the llama.cpp server and trigger 500 errors.
+let _completeQueue = Promise.resolve();
+
+export function complete(messages, options = {}) {
+  const p = _completeQueue.then(() => _complete(messages, options));
+  _completeQueue = p.catch(() => {});
+  return p;
+}
+
+async function _complete(messages, options = {}) {
   const res = await fetch(`${llmBase}/v1/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
