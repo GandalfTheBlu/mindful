@@ -29,7 +29,7 @@ You are given a user message and numbered candidate memories with their similari
 
 Ask yourself: would the response be noticeably more accurate or personal with this memory than without it? If the answer is not clearly yes, exclude it.
 
-Be strict. Scores below 0.70 require clear justification to include. Output comma-separated numbers only. If none qualify, output nothing.`;
+Be strict. Scores below 0.70 require clear justification to include. Output comma-separated numbers only. If none qualify, output <NOTHING>.`;
 
 export async function retrieve(session, userContent) {
   const { retrievalWindowChars, maxInjectedMemories } = config.memory;
@@ -70,15 +70,16 @@ export async function retrieve(session, userContent) {
         { max_tokens: config.memory.maxTokens }
       );
       log('filter-response', response.trim() || '(empty)');
+      if (!response.includes('<NOTHING>')) {
+        const indices = (response.match(/\d+/g) ?? [])
+          .map(n => parseInt(n) - 1)
+          .filter(i => i >= 0 && i < candidates.length);
 
-      const indices = (response.match(/\d+/g) ?? [])
-        .map(n => parseInt(n) - 1)
-        .filter(i => i >= 0 && i < candidates.length);
-
-      injected = indices
-        .map(i => candidates[i])
-        .filter(c => !alreadyInContext.has(c.text))
-        .slice(0, maxInjectedMemories);
+        injected = indices
+          .map(i => candidates[i])
+          .filter(c => !alreadyInContext.has(c.text))
+          .slice(0, maxInjectedMemories);
+      }
     }
   }
 
