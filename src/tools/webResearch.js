@@ -48,8 +48,8 @@ function trimMessages(messages) {
   return kept;
 }
 
-export async function webResearch({ topic, goal }, onStatus = () => {}) {
-  const maxIterations = config.tools?.webResearch?.maxIterations ?? 6;
+export async function webResearch({ topic, goal, maxIterationsOverride }, onStatus = () => {}) {
+  const maxIterations = maxIterationsOverride ?? config.tools?.webResearch?.maxIterations ?? 6;
   const maxTooManyChunksPerUrl = 2;
   log('start', `topic="${topic}" goal="${goal.slice(0, 80)}"`);
 

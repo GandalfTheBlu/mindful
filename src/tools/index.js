@@ -14,12 +14,13 @@ export const TOOLS = [
     type: 'function',
     function: {
       name: 'deep_research',
-      description: 'Conduct thorough multi-step web research on a topic, going deeper than web_research. Use this during a learning session to find high-quality resources, tutorials, documentation, or community discussions on a specific topic. Returns a detailed synthesised answer.',
+      description: 'Conduct thorough multi-step web research on a topic and automatically save the findings as a learning entry. Use this during a learning session to find high-quality resources, tutorials, documentation, or community discussions. The entry is saved automatically — do NOT call save_learning_entry afterward.',
       parameters: {
         type: 'object',
         properties: {
-          topic: { type: 'string', description: 'The topic to research.' },
-          goal:  { type: 'string', description: 'What specifically to find — e.g. the best tutorial, official documentation, community reception, practical entry point for someone at a given level.' }
+          topic:          { type: 'string', description: 'Concise topic name (used as the entry title).' },
+          goal:           { type: 'string', description: 'What specifically to find — e.g. the best tutorial, official documentation, practical entry point for a given level.' },
+          linkedProjects: { type: 'array', items: { type: 'string' }, description: 'Optional: names of current projects this topic connects to.' }
         },
         required: ['topic', 'goal']
       }
@@ -287,7 +288,7 @@ export const TOOLS = [
 ];
 
 export async function callTool(name, args, context = {}) {
-  if (name === 'deep_research')       return String(await deepResearch(args));
+  if (name === 'deep_research')       return String(await deepResearch(args, context));
   if (name === 'save_learning_entry') return String(saveLearningEntry(context.userId, args));
   if (name === 'list_learning_entries') return String(listLearningEntries(context.userId, args));
   if (name === 'link_entries')        return String(linkEntries(context.userId, args));
