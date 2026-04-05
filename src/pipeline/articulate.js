@@ -1,5 +1,5 @@
 import { streamOrToolCalls } from '../llm.js';
-import { TOOLS, callTool } from '../tools/index.js';
+import { TOOLS, callTool, formatToolStatus } from '../tools/index.js';
 import { ContextWindow } from '../context/ContextWindow.js';
 import { summarize } from '../core/summarizer.js';
 import config from '../config.js';
@@ -80,29 +80,6 @@ function makeThinkFilter(onChunk) {
   return { processChunk, flush };
 }
 
-function formatToolStatus(name, argsStr) {
-  try {
-    const args = JSON.parse(argsStr);
-    switch (name) {
-      case 'web_search':    return `Web search: ${args.query}`;
-      case 'web_fetch':     return `Fetching: ${(args.url ?? '').replace(/^https?:\/\//, '').slice(0, 60)}`;
-      case 'read_file':     return `Reading: ${args.path}`;
-      case 'list_directory': return `Listing: ${args.path}`;
-      case 'write_file':    return `Writing: ${args.path}`;
-      case 'create_directory': return `Creating: ${args.path}`;
-      case 'get_calendar_events': return 'Fetching calendar...';
-      case 'search_mail':   return `Searching mail: ${args.query}`;
-      case 'list_tasks':    return 'Fetching tasks...';
-      case 'create_task':   return `Creating task: ${args.title}`;
-      case 'complete_task': return 'Completing task...';
-      case 'get_weather':   return 'Checking weather...';
-      case 'get_recently_played': return 'Checking Spotify...';
-      case 'get_top_artists': return 'Fetching top artists...';
-      case 'get_currently_playing': return 'Checking Spotify...';
-      default:              return `Tool: ${name}`;
-    }
-  } catch { return `Tool: ${name}`; }
-}
 
 export async function articulate(session, onChunk, observations = [], procedural = [], userModelSummary = null, userModelFull = null, injectedCount = 0, onStatus = () => {}) {
   // Condense chat history if approaching horizon

@@ -179,26 +179,41 @@ function appendAssistantMessage(content) {
   return { div, bubble };
 }
 
+// --- SSE reader helper ---
+// Reads an SSE response and dispatches events to handlers by type.
+// handlers: { chunk, status, done, error } — each is an optional async function.
+async function readSSE(res, handlers) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      let event;
+      try { event = JSON.parse(line.slice(6)); } catch { continue; }
+      if (handlers[event.type]) await handlers[event.type](event);
+    }
+  }
+}
+
 // --- Send message ---
 form.addEventListener('submit', async e => {
   e.preventDefault();
   const content = inputEl.value.trim();
   if (!content || !currentSession) return;
 
-  // Resume AudioContext on user gesture so TTS plays without delay
-  if (ttsEnabled) {
-    const ctx = getAudioCtx();
-    if (ctx.state === 'suspended') ctx.resume();
-  }
-
+  if (ttsEnabled) { const ctx = getAudioCtx(); if (ctx.state === 'suspended') ctx.resume(); }
   inputEl.value = '';
   inputEl.style.height = 'auto';
   setUiEnabled(false);
-
   appendUserMessage(content);
   scrollToBottom();
 
-  // Streaming assistant bubble
   const assistantDiv = document.createElement('div');
   assistantDiv.className = 'message assistant';
   const statusEl = document.createElement('div');
@@ -227,51 +242,23 @@ form.addEventListener('submit', async e => {
     return;
   }
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let streamedText = '';
-
-  // Start streaming TTS immediately — feed sentences as text arrives
   if (activeTTS) { activeTTS.stop(); activeTTS = null; }
   const streamTTS = ttsEnabled ? new StreamingTTS(bubble) : null;
   if (streamTTS) activeTTS = streamTTS;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const event = JSON.parse(line.slice(6));
-
-      if (event.type === 'status') {
-        statusEl.textContent = event.label;
-        scrollToBottom();
-      } else if (event.type === 'chunk') {
-        streamedText += event.content;
-        textSpan.innerHTML = renderBold(streamedText);
-        textSpan.appendChild(cursor);
-        if (streamTTS) streamTTS.feedChunk(event.content);
-        scrollToBottom();
-      } else if (event.type === 'done') {
-        statusEl.remove();
-        cursor.remove();
-        if (streamTTS) streamTTS.flush();
-        setUiEnabled(true);
-      } else if (event.type === 'error') {
-        statusEl.remove();
-        cursor.remove();
-        if (streamTTS) streamTTS.stop();
-        bubble.textContent = `Error: ${event.message}`;
-        setUiEnabled(true);
-      }
-    }
-  }
+  let streamedText = '';
+  await readSSE(res, {
+    status: ev => { statusEl.textContent = ev.label; scrollToBottom(); },
+    chunk:  ev => {
+      streamedText += ev.content;
+      textSpan.innerHTML = renderBold(streamedText);
+      textSpan.appendChild(cursor);
+      if (streamTTS) streamTTS.feedChunk(ev.content);
+      scrollToBottom();
+    },
+    done:  () => { statusEl.remove(); cursor.remove(); if (streamTTS) streamTTS.flush(); setUiEnabled(true); },
+    error: ev => { statusEl.remove(); cursor.remove(); if (streamTTS) streamTTS.stop(); bubble.textContent = `Error: ${ev.message}`; setUiEnabled(true); }
+  });
 });
 
 // --- Briefing ---
@@ -307,53 +294,31 @@ btnLearn.addEventListener('click', async () => {
     return;
   }
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let streamedText = '';
-
   if (activeTTS) { activeTTS.stop(); activeTTS = null; }
   const learnTTS = ttsEnabled ? new StreamingTTS(bubble) : null;
   if (learnTTS) activeTTS = learnTTS;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const event = JSON.parse(line.slice(6));
-      if (event.type === 'status') {
-        statusEl.textContent = event.label;
-      } else if (event.type === 'chunk') {
-        statusEl.remove();
-        streamedText += event.content;
-        textSpan.innerHTML = renderBold(streamedText);
-        textSpan.appendChild(cursor);
-        if (learnTTS) learnTTS.feedChunk(event.content);
-        scrollToBottom();
-      } else if (event.type === 'done') {
-        cursor.remove();
-        if (learnTTS) learnTTS.flush();
-        if (event.generated) {
-          currentSession = await api('GET', `/api/sessions/${currentSession.id}`);
-        } else {
-          if (learnTTS) learnTTS.stop();
-          assistantDiv.remove();
-        }
-        setUiEnabled(true);
-        btnLearn.textContent = 'Learning';
-      } else if (event.type === 'error') {
-        cursor.remove();
-        if (learnTTS) learnTTS.stop();
-        bubble.textContent = `Error: ${event.message}`;
-        setUiEnabled(true);
-        btnLearn.textContent = 'Learning';
-      }
-    }
-  }
+  let streamedText = '';
+  await readSSE(res, {
+    status: ev => { statusEl.textContent = ev.label; },
+    chunk:  ev => {
+      statusEl.remove();
+      streamedText += ev.content;
+      textSpan.innerHTML = renderBold(streamedText);
+      textSpan.appendChild(cursor);
+      if (learnTTS) learnTTS.feedChunk(ev.content);
+      scrollToBottom();
+    },
+    done: async ev => {
+      cursor.remove();
+      if (learnTTS) learnTTS.flush();
+      if (ev.generated) { currentSession = await api('GET', `/api/sessions/${currentSession.id}`); }
+      else { if (learnTTS) learnTTS.stop(); assistantDiv.remove(); }
+      setUiEnabled(true);
+      btnLearn.textContent = 'Learning';
+    },
+    error: ev => { cursor.remove(); if (learnTTS) learnTTS.stop(); bubble.textContent = `Error: ${ev.message}`; setUiEnabled(true); btnLearn.textContent = 'Learning'; }
+  });
 });
 
 btnBrief.addEventListener('click', async () => {
@@ -388,13 +353,8 @@ btnBrief.addEventListener('click', async () => {
     return;
   }
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let streamedText = '';
   // Track latest status per task prefix so parallel tasks don't overwrite each other
-  const briefStatuses = new Map(); // prefix → { label, done }
-
+  const briefStatuses = new Map();
   function updateBriefStatus(label) {
     const sep = label.indexOf(': ');
     const prefix = sep > -1 ? label.slice(0, sep) : label;
@@ -402,53 +362,35 @@ btnBrief.addEventListener('click', async () => {
     const current = briefStatuses.get(prefix);
     briefStatuses.set(prefix, { label: isDone ? prefix : label, done: isDone || current?.done });
     briefStatusEl.innerHTML = [...briefStatuses.values()]
-      .map(({ label: l, done }) =>
-        `<div style="opacity:${done ? '0.4' : '1'}">${done ? '✓ ' : ''}${l}</div>`
-      ).join('');
+      .map(({ label: l, done }) => `<div style="opacity:${done ? '0.4' : '1'}">${done ? '✓ ' : ''}${l}</div>`)
+      .join('');
   }
 
   if (activeTTS) { activeTTS.stop(); activeTTS = null; }
   const briefTTS = ttsEnabled ? new StreamingTTS(bubble) : null;
   if (briefTTS) activeTTS = briefTTS;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const event = JSON.parse(line.slice(6));
-      if (event.type === 'status') {
-        updateBriefStatus(event.label);
-      } else if (event.type === 'chunk') {
-        briefStatusEl.remove();
-        streamedText += event.content;
-        textSpan.innerHTML = renderBold(streamedText);
-        textSpan.appendChild(cursor);
-        if (briefTTS) briefTTS.feedChunk(event.content);
-        scrollToBottom();
-      } else if (event.type === 'done') {
-        cursor.remove();
-        if (briefTTS) briefTTS.flush();
-        if (event.generated) {
-          currentSession = await api('GET', `/api/sessions/${currentSession.id}`);
-        } else {
-          if (briefTTS) briefTTS.stop();
-          assistantDiv.remove();
-        }
-        setUiEnabled(true);
-        btnBrief.textContent = 'Briefing';
-      } else if (event.type === 'error') {
-        cursor.remove();
-        if (briefTTS) briefTTS.stop();
-        bubble.textContent = `Error: ${event.message}`;
-        setUiEnabled(true);
-        btnBrief.textContent = 'Briefing';
-      }
-    }
-  }
+  let streamedText = '';
+  await readSSE(res, {
+    status: ev => updateBriefStatus(ev.label),
+    chunk:  ev => {
+      briefStatusEl.remove();
+      streamedText += ev.content;
+      textSpan.innerHTML = renderBold(streamedText);
+      textSpan.appendChild(cursor);
+      if (briefTTS) briefTTS.feedChunk(ev.content);
+      scrollToBottom();
+    },
+    done: async ev => {
+      cursor.remove();
+      if (briefTTS) briefTTS.flush();
+      if (ev.generated) { currentSession = await api('GET', `/api/sessions/${currentSession.id}`); }
+      else { if (briefTTS) briefTTS.stop(); assistantDiv.remove(); }
+      setUiEnabled(true);
+      btnBrief.textContent = 'Briefing';
+    },
+    error: ev => { cursor.remove(); if (briefTTS) briefTTS.stop(); bubble.textContent = `Error: ${ev.message}`; setUiEnabled(true); btnBrief.textContent = 'Briefing'; }
+  });
 });
 
 // --- Save ---
@@ -490,45 +432,24 @@ async function streamOpener(sessionId) {
   const openerTTS = ttsEnabled ? new StreamingTTS(bubble) : null;
   if (openerTTS) activeTTS = openerTTS;
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
   let streamedText = '';
   let hasContent = false;
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const event = JSON.parse(line.slice(6));
-
-      if (event.type === 'chunk') {
-        if (!hasContent) {
-          messages.appendChild(assistantDiv);
-          hasContent = true;
-        }
-        streamedText += event.content;
-        textSpan.innerHTML = renderBold(streamedText);
-        textSpan.appendChild(cursor);
-        if (openerTTS) openerTTS.feedChunk(event.content);
-        scrollToBottom();
-      } else if (event.type === 'done') {
-        cursor.remove();
-        if (openerTTS) openerTTS.flush();
-        if (hasContent) {
-          currentSession = await api('GET', `/api/sessions/${sessionId}`);
-        } else {
-          if (openerTTS) openerTTS.stop();
-        }
-      }
+  await readSSE(res, {
+    chunk: ev => {
+      if (!hasContent) { messages.appendChild(assistantDiv); hasContent = true; }
+      streamedText += ev.content;
+      textSpan.innerHTML = renderBold(streamedText);
+      textSpan.appendChild(cursor);
+      if (openerTTS) openerTTS.feedChunk(ev.content);
+      scrollToBottom();
+    },
+    done: async () => {
+      cursor.remove();
+      if (openerTTS) openerTTS.flush();
+      if (hasContent) { currentSession = await api('GET', `/api/sessions/${sessionId}`); }
+      else { if (openerTTS) openerTTS.stop(); }
     }
-  }
+  });
 }
 
 // --- Title editing ---

@@ -223,17 +223,27 @@ app.get('/api/spotify/reauth/wait', (req, res) => {
     .catch(err => { send({ type: 'error', message: err.message }); res.end(); });
 });
 
+// --- SSE helper ---
+// Sets headers, returns a send() function. Caller is responsible for try/catch/res.end().
+function startSSE(res) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  return obj => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+}
+
+// Mutex for LLM-heavy routes (brief, learn, chat). Opener is lightweight
+// and allowed to run concurrently, so it does not participate.
+let busy = false;
+
 // --- Session opener route (SSE) ---
 app.post('/api/sessions/:id/open', async (req, res) => {
   const session = loadSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
 
-  // Only generate an opener for a brand-new session with no messages
-  if (session.messages.length > 0) {
-    return res.status(200).json({ skipped: true });
-  }
+  if (session.messages.length > 0) return res.status(200).json({ skipped: true });
 
-  // Compute days since the previous session for this user
   const allSessions = listSessions(session.userId);
   const previousSession = allSessions.find(s => s.id !== session.id);
   let daysSinceLastSession = null;
@@ -241,25 +251,10 @@ app.post('/api/sessions/:id/open', async (req, res) => {
     daysSinceLastSession = (Date.now() - new Date(previousSession.createdAt).getTime()) / (1000 * 60 * 60 * 24);
   }
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  function send(obj) {
-    res.write(`data: ${JSON.stringify(obj)}\n\n`);
-  }
-
+  const send = startSSE(res);
   try {
-    const content = await generateOpener(session, daysSinceLastSession, chunk => {
-      send({ type: 'chunk', content: chunk });
-    });
-
-    if (content) {
-      session.messages.push({ role: 'assistant', content });
-      saveSession(session);
-    }
-
+    const content = await generateOpener(session, daysSinceLastSession, chunk => send({ type: 'chunk', content: chunk }));
+    if (content) { session.messages.push({ role: 'assistant', content }); saveSession(session); }
     send({ type: 'done', generated: !!content });
   } catch (err) {
     console.error(err);
@@ -272,28 +267,14 @@ app.post('/api/sessions/:id/open', async (req, res) => {
 // --- Briefing route (SSE) ---
 app.post('/api/sessions/:id/brief', async (req, res) => {
   if (busy) return res.status(409).json({ error: 'Busy' });
-
   const session = loadSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  function send(obj) { res.write(`data: ${JSON.stringify(obj)}\n\n`); }
-
   busy = true;
+  const send = startSSE(res);
   try {
-    const content = await runBriefing(
-      session,
-      chunk => send({ type: 'chunk', content: chunk }),
-      label => send({ type: 'status', label })
-    );
-    if (content) {
-      session.messages.push({ role: 'assistant', content });
-      saveSession(session);
-    }
+    const content = await runBriefing(session, chunk => send({ type: 'chunk', content: chunk }), label => send({ type: 'status', label }));
+    if (content) { session.messages.push({ role: 'assistant', content }); saveSession(session); }
     send({ type: 'done', generated: !!content });
   } catch (err) {
     console.error(err);
@@ -307,28 +288,14 @@ app.post('/api/sessions/:id/brief', async (req, res) => {
 // --- Learning proposal route (SSE) ---
 app.post('/api/sessions/:id/learn', async (req, res) => {
   if (busy) return res.status(409).json({ error: 'Busy' });
-
   const session = loadSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  function send(obj) { res.write(`data: ${JSON.stringify(obj)}\n\n`); }
-
   busy = true;
+  const send = startSSE(res);
   try {
-    const content = await runLearningProposal(
-      session,
-      chunk => send({ type: 'chunk', content: chunk }),
-      label => send({ type: 'status', label })
-    );
-    if (content) {
-      session.messages.push({ role: 'assistant', content });
-      saveSession(session);
-    }
+    const content = await runLearningProposal(session, chunk => send({ type: 'chunk', content: chunk }), label => send({ type: 'status', label }));
+    if (content) { session.messages.push({ role: 'assistant', content }); saveSession(session); }
     send({ type: 'done', generated: !!content });
   } catch (err) {
     console.error(err);
@@ -340,29 +307,17 @@ app.post('/api/sessions/:id/learn', async (req, res) => {
 });
 
 // --- Chat route (SSE) ---
-let busy = false;
-
 app.post('/api/sessions/:id/chat', async (req, res) => {
   if (busy) return res.status(409).json({ error: 'Busy' });
-
   const session = loadSession(req.params.id);
   if (!session) return res.status(404).json({ error: 'Not found' });
 
   const { content } = req.body;
   if (!content?.trim()) return res.status(400).json({ error: 'Empty message' });
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  function send(obj) {
-    res.write(`data: ${JSON.stringify(obj)}\n\n`);
-  }
-
   busy = true;
   let streamDone = false;
-
+  const send = startSSE(res);
   try {
     await pipeline.process(
       session,
@@ -371,7 +326,6 @@ app.post('/api/sessions/:id/chat', async (req, res) => {
       label => send({ type: 'status', label }),
       () => { streamDone = true; saveSession(session); send({ type: 'done' }); }
     );
-
   } catch (err) {
     console.error(err);
     if (!streamDone) send({ type: 'error', message: err.message });

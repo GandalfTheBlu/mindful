@@ -289,3 +289,35 @@ export async function callTool(name, args, context = {}, onStatus = () => {}) {
   if (name === 'get_currently_playing') return String(await getCurrentlyPlaying(args));
   throw new Error(`Unknown tool: ${name}`);
 }
+
+// Status label shown in the UI while each tool is running.
+// Colocated with tool definitions so adding a tool only requires one edit.
+const TOOL_STATUS = {
+  deep_research:        args => `Researching: ${args.topic}`,
+  web_research:         args => `Web research: ${args.topic}`,
+  read_file:            args => `Reading: ${args.path}`,
+  list_directory:       args => `Listing: ${args.path}`,
+  write_file:           args => `Writing: ${args.path}`,
+  create_directory:     args => `Creating: ${args.path}`,
+  get_calendar_events:  ()   => 'Fetching calendar...',
+  search_mail:          args => `Searching mail: ${args.query}`,
+  list_tasks:           ()   => 'Fetching tasks...',
+  create_task:          args => `Creating task: ${args.title}`,
+  complete_task:        ()   => 'Completing task...',
+  get_weather:          ()   => 'Checking weather...',
+  get_recently_played:  ()   => 'Checking Spotify...',
+  get_top_artists:      ()   => 'Fetching top artists...',
+  get_currently_playing: ()  => 'Checking Spotify...',
+  list_learning_entries: ()  => 'Checking learning library...',
+  link_entries:         ()   => 'Linking entries...',
+  log_session:          ()   => 'Logging session...',
+};
+
+export function formatToolStatus(name, argsStr) {
+  try {
+    const label = TOOL_STATUS[name]?.(JSON.parse(argsStr));
+    return label ?? `Tool: ${name}`;
+  } catch {
+    return `Tool: ${name}`;
+  }
+}
