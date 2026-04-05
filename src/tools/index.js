@@ -1,5 +1,4 @@
-import { webFetch } from './webFetch.js';
-import { webSearch } from './webSearch.js';
+import { webResearch } from './webResearch.js';
 import { readFile } from './readFile.js';
 import { listDirectory, writeFile, createDirectory } from './fileSystem.js';
 import { getCalendarEvents } from './googleCalendar.js';
@@ -12,30 +11,15 @@ export const TOOLS = [
   {
     type: 'function',
     function: {
-      name: 'web_search',
-      description: 'Search the web and return a list of results (titles, URLs, snippets). If the answer is not directly present in the snippets, follow up with web_fetch on the most relevant URL to get the full content.',
+      name: 'web_research',
+      description: 'Research a topic on the web. A sub-agent will autonomously search, fetch pages, and return a synthesised answer. Use this for any question that requires current information from the internet.',
       parameters: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'The search query.' }
+          topic: { type: 'string', description: 'The topic to research.' },
+          goal:  { type: 'string', description: 'What specific information you need — be precise so the agent knows when it has found enough.' }
         },
-        required: ['query']
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'web_fetch',
-      description: 'Fetch the text content of a web page by URL. For long pages, provide a task to focus the summary.',
-      parameters: {
-        type: 'object',
-        properties: {
-          url: { type: 'string', description: 'The full URL to fetch.' },
-          task: { type: 'string', description: 'Optional: what to look for on the page.' },
-          keywords: { type: 'array', items: { type: 'string' }, description: 'Optional: keywords to filter page sections before summarising.' }
-        },
-        required: ['url']
+        required: ['topic', 'goal']
       }
     }
   },
@@ -224,8 +208,7 @@ export const TOOLS = [
 ];
 
 export async function callTool(name, args, context = {}) {
-  if (name === 'web_search') return String(await webSearch(args));
-  if (name === 'web_fetch') return String(await webFetch(args));
+  if (name === 'web_research') return String(await webResearch(args));
   if (name === 'read_file') return String(await readFile(args, context));
   if (name === 'list_directory') return String(await listDirectory(args, context));
   if (name === 'write_file') return String(await writeFile(args, context));

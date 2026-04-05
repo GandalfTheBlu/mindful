@@ -41,7 +41,7 @@ export async function getTopArtists({ timeRange = 'short_term', limit = 10 } = {
   if (items.length === 0) return `No top artists data for ${rangeLabel}.`;
 
   const lines = items.map((a, i) => {
-    const genres = a.genres.slice(0, 3).join(', ');
+    const genres = (a.genres ?? []).slice(0, 3).join(', ');
     return `${i + 1}. ${a.name}${genres ? ` (${genres})` : ''}`;
   });
   return `Top artists (${rangeLabel}):\n${lines.join('\n')}`;

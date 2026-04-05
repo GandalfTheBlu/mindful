@@ -14,7 +14,8 @@ Combine these partial summaries into a single coherent answer for the given task
 // Splits text into overlapping chunks, optionally filters by keywords,
 // summarises each matching chunk with a task-relevance lens, then merges.
 // keywords: string[] — if provided, only chunks containing at least one keyword are summarised.
-export async function chunkSummarize(text, task, keywords = []) {
+// onProgress: (label: string) => void — called before each chunk summarisation step.
+export async function chunkSummarize(text, task, keywords = [], onProgress = () => {}) {
   const { chunkSize = 3000, overlapSize = 200 } = config.tools?.readFile ?? {};
 
   const allChunks = [];
@@ -29,16 +30,27 @@ export async function chunkSummarize(text, task, keywords = []) {
     ? allChunks.filter(c => keywords.some(kw => c.toLowerCase().includes(kw.toLowerCase())))
     : allChunks;
 
-  log('chunks', keywords.length > 0
-    ? `${chunks.length}/${allChunks.length} after keyword filter`
-    : allChunks.length);
+  log(
+    'chunks',
+    keywords.length > 0
+      ? `${chunks.length}/${allChunks.length} after keyword filter`
+      : allChunks.length
+  );
+
+  const maxChunks = config.tools?.webFetch?.maxChunks ?? 8;
+  if (chunks.length > maxChunks) {
+    log('abort', `${chunks.length} chunks exceeds limit of ${maxChunks} — keywords too broad`);
+    return `TOO_MANY_CHUNKS: ${chunks.length} matching chunks (limit ${maxChunks}). Use more specific keywords to narrow the search.`;
+  }
 
   const summaries = [];
-  for (const chunk of chunks) {
+  for (let i = 0; i < chunks.length; i++) {
+    onProgress(`Summarizing chunk ${i + 1}/${chunks.length}...`);
+    log(`chunk ${i + 1}/${chunks.length}`, '');
     const summary = await complete(
       [
         { role: 'system', content: CHUNK_SYSTEM },
-        { role: 'user', content: `Task: ${task}\n\nText:\n${chunk}` }
+        { role: 'user', content: `Task: ${task}\n\nText:\n${chunks[i]}` }
       ],
       { max_tokens: 300 }
     );
@@ -49,6 +61,7 @@ export async function chunkSummarize(text, task, keywords = []) {
   if (summaries.length === 1) return summaries[0];
 
   log('merge', `${summaries.length} summaries`);
+  onProgress(`Merging ${summaries.length} summaries...`);
   return await complete(
     [
       { role: 'system', content: MERGE_SYSTEM },
