@@ -39,14 +39,19 @@ function slugify(text) {
 }
 
 function renderMarkdown(entry) {
-  const sourceStr = entry.source?.url
-    ? `[${entry.source.title ?? entry.source.url}](${entry.source.url})${entry.source.type ? ` — ${entry.source.type}` : ''}`
-    : entry.source?.title ?? '(no source)';
+  const sources = Array.isArray(entry.sources) ? entry.sources : (entry.source ? [entry.source] : []);
+  const sourceLines = sources.length > 0
+    ? sources.map(s => s.url
+        ? `- [${s.title ?? s.url}](${s.url})${s.type ? ` — ${s.type}` : ''}`
+        : `- ${s.title ?? '(unknown)'}`)
+    : ['- (no sources)'];
 
   const lines = [
     `# ${entry.topic}`,
     `**Date:** ${entry.date}`,
-    `**Source:** ${sourceStr}`,
+    '',
+    '## Sources',
+    ...sourceLines,
     '',
     '## Key Concepts',
     ...(entry.keyConcepts ?? []).map(c => `- ${c}`),
@@ -72,17 +77,20 @@ function renderMarkdown(entry) {
 // --- Tool implementations ---
 
 export function saveLearningEntry(userId, args) {
-  const { topic, source, keyConcepts, entryPoint, relevance, linkedProjects } = args;
+  const { topic, sources, source, keyConcepts, entryPoint, relevance, linkedProjects } = args;
   if (!topic?.trim()) throw new Error('topic is required');
 
   const date = new Date().toISOString().slice(0, 10);
   const id = `${date}-${slugify(topic)}`;
 
+  // Accept either sources (array) or legacy source (object)
+  const resolvedSources = Array.isArray(sources) ? sources : (source ? [source] : []);
+
   const entry = {
     id,
     date,
     topic: topic.trim(),
-    source: source ?? null,
+    sources: resolvedSources,
     keyConcepts: Array.isArray(keyConcepts) ? keyConcepts : [],
     entryPoint: entryPoint ?? null,
     relevance: relevance ?? null,
@@ -94,7 +102,6 @@ export function saveLearningEntry(userId, args) {
   fs.writeFileSync(entryPath(userId, id), renderMarkdown(entry), 'utf8');
 
   const index = readIndex(userId);
-  // Remove any existing entry with same id (re-run guard)
   index.entries = index.entries.filter(e => e.id !== id);
   index.entries.push({ id, date, topic: entry.topic, linkedProjects: entry.linkedProjects });
   writeIndex(userId, index);

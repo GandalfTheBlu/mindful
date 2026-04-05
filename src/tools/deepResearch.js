@@ -6,25 +6,25 @@ function log(label, data) {
   console.log(`[${new Date().toISOString()}] [deepResearch] ${label}`, data ?? '');
 }
 
-// The research agent is asked to end with a structured block so we can
-// extract source, entry point, and concepts reliably without depending
-// on the chat LLM to carry tool result content into a second tool call.
+// The research agent ends its ANSWER with a structured block for reliable extraction.
+// Multiple sources are supported — one per SOURCE line, pipe-delimited: url | title | type
 const STRUCTURED_GOAL_SUFFIX = `
+At the end of your ANSWER, after a line containing only "---", include this block:
+SOURCES: <url1> | <title1> | <type1>
+SOURCES: <url2> | <title2> | <type2>
+(add one SOURCES line per relevant resource found, up to 5)
+ENTRY_POINT: <specific section, chapter, timestamp, or starting point for this topic>
+CONCEPTS: <key concept 1> | <key concept 2> | <key concept 3> | ...
 
-At the end of your ANSWER, after a line containing only "---", include this block (fill in each field):
-SOURCE_URL: <the single best URL you found>
-SOURCE_TITLE: <title of that resource>
-SOURCE_TYPE: <article | documentation | video | tutorial | community>
-ENTRY_POINT: <the specific section, chapter, timestamp, or starting point most relevant for this topic>
-CONCEPTS: <3-6 key concepts or takeaways, separated by " | ">
+Types: article, documentation, video, tutorial, community
+Include a SOURCES line for every distinct resource you fetched or cited.
 
 Example:
 ---
-SOURCE_URL: https://example.com/article
-SOURCE_TITLE: Guide to X
-SOURCE_TYPE: tutorial
-ENTRY_POINT: Start at section 2 — covers the core technique directly
-CONCEPTS: concept A | concept B | concept C`;
+SOURCES: https://example.com/guide | Complete Guide to X | tutorial
+SOURCES: https://docs.example.com | Official X Documentation | documentation
+ENTRY_POINT: Start at Chapter 2 — introduces the core concepts directly
+CONCEPTS: concept A | concept B | concept C | concept D`;
 
 function parseStructuredAnswer(raw) {
   const sepIdx = raw.lastIndexOf('\n---');
@@ -32,22 +32,25 @@ function parseStructuredAnswer(raw) {
   const block = sepIdx > -1 ? raw.slice(sepIdx) : '';
 
   const get = (field) => {
-    const m = block.match(new RegExp(`${field}:\\s*(.+)`, 'i'));
+    const m = block.match(new RegExp(`^${field}:\\s*(.+)`, 'im'));
     return m ? m[1].trim() : null;
   };
+
+  // Parse all SOURCES lines
+  const sourcesRaw = [...block.matchAll(/^SOURCES:\s*(.+)/gim)].map(m => m[1].trim());
+  const sources = sourcesRaw.map(line => {
+    const parts = line.split('|').map(p => p.trim());
+    return { url: parts[0] || null, title: parts[1] || null, type: parts[2] || null };
+  }).filter(s => s.url || s.title);
 
   const conceptsRaw = get('CONCEPTS');
   const keyConcepts = conceptsRaw
     ? conceptsRaw.split(/\s*\|\s*/).map(c => c.trim()).filter(Boolean)
     : [];
 
-  const url = get('SOURCE_URL');
-  const title = get('SOURCE_TITLE');
-  const type = get('SOURCE_TYPE');
-
   return {
     narrative,
-    source: (url || title) ? { url: url ?? null, title: title ?? null, type: type ?? null } : null,
+    sources,
     entryPoint: get('ENTRY_POINT'),
     keyConcepts
   };
@@ -63,22 +66,19 @@ export async function deepResearch(args, context = {}, onStatus = () => {}) {
 
   log('start', `topic="${topic}" userId=${userId}`);
 
-  const structuredGoal = goal + STRUCTURED_GOAL_SUFFIX;
-
   const rawAnswer = await webResearch(
-    { topic, goal: structuredGoal, maxIterationsOverride: iterations },
+    { topic, goal, maxIterationsOverride: iterations, answerSuffix: STRUCTURED_GOAL_SUFFIX },
     onStatus
   );
 
-  const { narrative, source, entryPoint, keyConcepts } = parseStructuredAnswer(rawAnswer);
-  log('parsed', `source=${source?.url ?? 'none'} concepts=${keyConcepts.length} entryPoint=${!!entryPoint}`);
+  const { narrative, sources, entryPoint, keyConcepts } = parseStructuredAnswer(rawAnswer);
+  log('parsed', `sources=${sources.length} concepts=${keyConcepts.length} entryPoint=${!!entryPoint}`);
 
-  // Auto-save if we have a userId — don't rely on the chat LLM to do it
   if (userId) {
     try {
       const result = saveLearningEntry(userId, {
         topic,
-        source,
+        sources,
         keyConcepts,
         entryPoint,
         relevance: narrative,
@@ -90,9 +90,8 @@ export async function deepResearch(args, context = {}, onStatus = () => {}) {
     }
   }
 
-  // Return a concise summary to the chat LLM — it doesn't need the full structured block
   const lines = [`Research complete: ${topic}`];
-  if (source?.url) lines.push(`Source: ${source.title ?? source.url} — ${source.url}`);
+  if (sources.length) lines.push(`Sources: ${sources.map(s => s.title ?? s.url).join(', ')}`);
   if (entryPoint) lines.push(`Entry point: ${entryPoint}`);
   if (keyConcepts.length) lines.push(`Key concepts: ${keyConcepts.join(', ')}`);
   lines.push('', narrative);

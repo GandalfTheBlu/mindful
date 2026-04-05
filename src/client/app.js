@@ -287,9 +287,11 @@ btnLearn.addEventListener('click', async () => {
   statusEl.className = 'stream-status';
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
+  const textSpan = document.createElement('span');
   const cursor = document.createElement('span');
   cursor.className = 'cursor';
-  bubble.appendChild(cursor);
+  textSpan.appendChild(cursor);
+  bubble.appendChild(textSpan);
   assistantDiv.appendChild(statusEl);
   assistantDiv.appendChild(bubble);
   messages.appendChild(assistantDiv);
@@ -328,8 +330,8 @@ btnLearn.addEventListener('click', async () => {
       } else if (event.type === 'chunk') {
         statusEl.remove();
         streamedText += event.content;
-        bubble.innerHTML = renderBold(streamedText);
-        bubble.appendChild(cursor);
+        textSpan.innerHTML = renderBold(streamedText);
+        textSpan.appendChild(cursor);
         if (learnTTS) learnTTS.feedChunk(event.content);
         scrollToBottom();
       } else if (event.type === 'done') {
@@ -366,9 +368,11 @@ btnBrief.addEventListener('click', async () => {
   briefStatusEl.className = 'stream-status';
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
+  const textSpan = document.createElement('span');
   const cursor = document.createElement('span');
   cursor.className = 'cursor';
-  bubble.appendChild(cursor);
+  textSpan.appendChild(cursor);
+  bubble.appendChild(textSpan);
   assistantDiv.appendChild(briefStatusEl);
   assistantDiv.appendChild(bubble);
   messages.appendChild(assistantDiv);
@@ -421,8 +425,8 @@ btnBrief.addEventListener('click', async () => {
       } else if (event.type === 'chunk') {
         briefStatusEl.remove();
         streamedText += event.content;
-        bubble.innerHTML = renderBold(streamedText);
-        bubble.appendChild(cursor);
+        textSpan.innerHTML = renderBold(streamedText);
+        textSpan.appendChild(cursor);
         if (briefTTS) briefTTS.feedChunk(event.content);
         scrollToBottom();
       } else if (event.type === 'done') {
@@ -460,6 +464,7 @@ btnNew.addEventListener('click', async () => {
   messages.innerHTML = '';
   chatTitle.textContent = session.title;
   setUiEnabled(false);
+  if (ttsEnabled) { const ctx = getAudioCtx(); if (ctx.state === 'suspended') ctx.resume(); }
   await loadSessionList();
   await streamOpener(session.id);
   setUiEnabled(true);
@@ -474,10 +479,16 @@ async function streamOpener(sessionId) {
   assistantDiv.className = 'message assistant';
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
+  const textSpan = document.createElement('span');
   const cursor = document.createElement('span');
   cursor.className = 'cursor';
-  bubble.appendChild(cursor);
+  textSpan.appendChild(cursor);
+  bubble.appendChild(textSpan);
   assistantDiv.appendChild(bubble);
+
+  if (activeTTS) { activeTTS.stop(); activeTTS = null; }
+  const openerTTS = ttsEnabled ? new StreamingTTS(bubble) : null;
+  if (openerTTS) activeTTS = openerTTS;
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -503,14 +514,17 @@ async function streamOpener(sessionId) {
           hasContent = true;
         }
         streamedText += event.content;
-        bubble.innerHTML = renderBold(streamedText);
-        bubble.appendChild(cursor);
+        textSpan.innerHTML = renderBold(streamedText);
+        textSpan.appendChild(cursor);
+        if (openerTTS) openerTTS.feedChunk(event.content);
         scrollToBottom();
       } else if (event.type === 'done') {
         cursor.remove();
+        if (openerTTS) openerTTS.flush();
         if (hasContent) {
-          // Refresh session so it has the opener message
           currentSession = await api('GET', `/api/sessions/${sessionId}`);
+        } else {
+          if (openerTTS) openerTTS.stop();
         }
       }
     }

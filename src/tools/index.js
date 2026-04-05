@@ -7,7 +7,7 @@ import { searchMail } from './googleMail.js';
 import { listTasks, createTask, completeTask } from './googleTasks.js';
 import { getWeather } from './weather.js';
 import { getRecentlyPlayed, getTopArtists, getCurrentlyPlaying } from './spotify.js';
-import { saveLearningEntry, listLearningEntries, linkEntries, logSession } from './learningStore.js';
+import { listLearningEntries, linkEntries, logSession } from './learningStore.js';
 
 export const TOOLS = [
   {
@@ -23,25 +23,6 @@ export const TOOLS = [
           linkedProjects: { type: 'array', items: { type: 'string' }, description: 'Optional: names of current projects this topic connects to.' }
         },
         required: ['topic', 'goal']
-      }
-    }
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'save_learning_entry',
-      description: 'Save a learning entry to the user\'s personal learning library after researching a topic. Call this once you have researched a topic and are ready to record the findings.',
-      parameters: {
-        type: 'object',
-        properties: {
-          topic:         { type: 'string', description: 'Concise topic name.' },
-          source:        { type: 'object', description: 'Best resource found: { title, url, type } where type is e.g. "documentation", "tutorial", "video", "community".' },
-          keyConcepts:   { type: 'array', items: { type: 'string' }, description: 'Key concepts or takeaways (3–6 bullet points).' },
-          entryPoint:    { type: 'string', description: 'The specific starting point recommended for the user — a chapter, section, video timestamp, or first exercise.' },
-          relevance:     { type: 'string', description: 'One or two sentences on why this is useful for the user right now, tied to a specific project or goal.' },
-          linkedProjects:{ type: 'array', items: { type: 'string' }, description: 'Names of current projects this topic connects to.' }
-        },
-        required: ['topic', 'keyConcepts', 'entryPoint', 'relevance']
       }
     }
   },
@@ -287,9 +268,8 @@ export const TOOLS = [
   }
 ];
 
-export async function callTool(name, args, context = {}) {
-  if (name === 'deep_research')       return String(await deepResearch(args, context));
-  if (name === 'save_learning_entry') return String(saveLearningEntry(context.userId, args));
+export async function callTool(name, args, context = {}, onStatus = () => {}) {
+  if (name === 'deep_research')       return String(await deepResearch(args, context, onStatus));
   if (name === 'list_learning_entries') return String(listLearningEntries(context.userId, args));
   if (name === 'link_entries')        return String(linkEntries(context.userId, args));
   if (name === 'log_session')         return String(logSession(context.userId, args));

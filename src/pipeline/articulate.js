@@ -174,7 +174,7 @@ export async function articulate(session, onChunk, observations = [], procedural
       onStatus(formatToolStatus(tc.name, tc.arguments));
       let result;
       try {
-        result = await callTool(tc.name, JSON.parse(tc.arguments), toolContext);
+        result = await callTool(tc.name, JSON.parse(tc.arguments), toolContext, onStatus);
       } catch (err) {
         result = `Error: ${err.message}`;
       }

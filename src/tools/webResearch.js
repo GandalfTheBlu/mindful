@@ -48,22 +48,25 @@ function trimMessages(messages) {
   return kept;
 }
 
-export async function webResearch({ topic, goal, maxIterationsOverride }, onStatus = () => {}) {
+export async function webResearch({ topic, goal, maxIterationsOverride, answerSuffix = '' }, onStatus = () => {}) {
   const maxIterations = maxIterationsOverride ?? config.tools?.webResearch?.maxIterations ?? 6;
   const maxTooManyChunksPerUrl = 2;
   log('start', `topic="${topic}" goal="${goal.slice(0, 80)}"`);
 
   const today = new Date().toISOString().slice(0, 10);
+  const initialUserContent = answerSuffix
+    ? `Today's date: ${today}\nTopic: ${topic}\nGoal: ${goal}\n\n${answerSuffix}`
+    : `Today's date: ${today}\nTopic: ${topic}\nGoal: ${goal}`;
   const messages = [
     { role: 'system', content: AGENT_SYSTEM },
-    { role: 'user', content: `Today's date: ${today}\nTopic: ${topic}\nGoal: ${goal}` }
+    { role: 'user', content: initialUserContent }
   ];
 
   let iterations = 0;
   const tooManyChunksPerUrl = new Map(); // url → retry count
 
   while (iterations < maxIterations) {
-    const response = await complete(trimMessages(messages), { max_tokens: 300, temperature: 0.1 });
+    const response = await complete(trimMessages(messages), { max_tokens: 500, temperature: 0.1 });
     messages.push({ role: 'assistant', content: response });
     log(`iter-${iterations + 1}`, response.slice(0, 120).replace(/\n/g, ' '));
 
@@ -134,8 +137,11 @@ export async function webResearch({ topic, goal, maxIterationsOverride }, onStat
 
   // Max iterations reached — force a final answer
   const trimmed = trimMessages(messages);
-  trimmed.push({ role: 'user', content: 'You have reached the research limit. Output your ANSWER now based on everything gathered.' });
-  const final = await complete(trimmed, { max_tokens: 400, temperature: 0.1 });
+  const forceMsg = answerSuffix
+    ? `You have reached the research limit. Output your ANSWER now based on everything gathered.\n\n${answerSuffix}`
+    : 'You have reached the research limit. Output your ANSWER now based on everything gathered.';
+  trimmed.push({ role: 'user', content: forceMsg });
+  const final = await complete(trimmed, { max_tokens: 600, temperature: 0.1 });
   const answer = final.replace(/^ANSWER:\s*/m, '').trim();
   log('done-forced', `${answer.length} chars: ${answer.slice(0, 120).replace(/\n/g, ' ')}`);
   onStatus('✓');
