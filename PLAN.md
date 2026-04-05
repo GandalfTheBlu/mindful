@@ -378,10 +378,10 @@ Once these tools are available, the briefing pipeline should use all of them tog
 4. Open/overdue tasks (`list_tasks`)
 5. Top news of the day — `web_fetch` a public news feed (RSS/Atom or JSON API, no key required), extract headlines + summaries, ask the LLM to pick and summarise the most significant stories
 6. Active goals from memory
-7. Recent listening as mood signal (`get_recently_played` — optional, if Spotify configured)
+7. Spotify context (`get_top_artists`, `get_recently_played` — if configured): extract the user's genre affinities and favourite artists, then search for relevant live events (concerts, tours, festivals) using `web_fetch` against a ticketing/events API or search
 8. User model for context
 
-The LLM synthesis call should surface connections across all sources: a calendar event + related task + relevant weather in one note; a goal with an overdue task blocking it; a news story relevant to a goal or upcoming event; etc.
+The LLM synthesis call should surface connections across all sources: a calendar event + related task + relevant weather in one note; a goal with an overdue task blocking it; a news story relevant to a goal or upcoming event; a concert by a favourite artist or in a genre the user listens to heavily.
 
 ---
 
@@ -404,6 +404,82 @@ The assistant already reads tasks and creates them on request. The next step is 
 - Should autonomous task creation require explicit opt-in (config flag)?
 - Dedicated task list ("mindful") vs. writing to the user's default list?
 - Risk of noise: the model creating tasks the user didn't ask for could be annoying — needs a conservative trigger threshold
+
+---
+
+## Phase 16: News Freshness and Date Accuracy
+
+**Goal:** Ensure the briefing only surfaces genuinely current news — no stories mislabelled as today's when they are hours or days old.
+
+### Problem
+
+The web research agent fetches news pages that mix fresh stories with older content. The LLM then presents those older stories under today's date because it has no mechanism to verify publication timestamps before including them.
+
+### Approach
+
+- **Enforce publication date in research goals** — strengthen the goal prompt for world and local news to explicitly require that each story's publication date is confirmed before inclusion, and to discard any story whose date cannot be verified.
+- **Date-aware search queries** — include the exact date in the search query (already done) and add a post-processing filter that asks the LLM to strip any story that is more than 24 hours old.
+- **Source preference** — prefer results from news aggregators (Google News, AP, Reuters) that expose clear publication timestamps in their search snippets, rather than article pages where dates are buried or absent.
+- **Briefing synthesis instruction** — add an explicit rule to `buildBriefingSystem` requiring the model to omit any story it cannot attribute a confirmed date to, rather than guessing or inheriting the query date.
+
+### Open Questions
+
+- Should stale stories be dropped silently or surfaced with a "recent but not today" label?
+- Is a second LLM pass to filter stories worth the latency cost, or should the research agent handle it?
+
+---
+
+## Phase 17: Learning-Oriented Briefing
+
+**Goal:** Extend the daily briefing with a curated learning section — the LLM identifies topics worth exploring given the user's goals and interests, then researches concrete, high-quality resources for each.
+
+### Approach
+
+After the existing briefing data is gathered, an additional pipeline step runs:
+
+1. **Topic derivation** — a small LLM call reads the user model, active goals, and recent memories, and outputs 1-3 specific learning topics the user might benefit from exploring right now. Topics should be concrete and actionable (e.g. "tournament footwork drills for HEMA longsword" or "music theory: voice leading") rather than vague ("learn something new").
+
+2. **Resource research** — for each topic, a `webResearch` agent searches for the best available resources: YouTube tutorials or series, well-regarded blog posts, active forums or subreddits, documentation or books. The agent is instructed to prefer resources that are: recent, highly regarded, and appropriate for the user's apparent level.
+
+3. **Briefing section** — the synthesis LLM includes a compact "Learning picks" section: one sentence per topic naming the resource and why it's relevant to the user's current trajectory.
+
+### Design decisions
+
+- Topic derivation reuses the same LLM + `complete()` pattern as `deriveEventTopic` — fast and cheap.
+- Each topic gets its own `webResearch` call, run in parallel.
+- The section is omitted from the briefing if no meaningful topics are derived or no good resources are found.
+- Configurable: `tools.briefing.learningTopics` (default 2) controls how many topics are researched per briefing.
+
+---
+
+## Phase 18: Self-Improvement
+
+**Goal:** Give the system the ability to reflect on its own behaviour and propose concrete improvements — closing the loop between observed failure modes and actual code/prompt changes.
+
+### Areas to explore
+
+**1. Prompt refinement via outcome tracking**
+- After each briefing or research task, log a structured outcome: what was found, what failed, which agents exhausted iterations without useful results.
+- Periodically, an LLM reflection pass reads the outcome log and proposes edits to specific prompt strings (system prompts, goal templates, keyword guidance) that would have produced better results.
+- Proposed changes are written to a `proposals.md` file for the user to review and accept — no automatic self-modification without oversight.
+
+**2. Research strategy learning**
+- Track which search queries and keyword sets led to successful fetches vs. `TOO_MANY_CHUNKS` or `Nothing relevant found`.
+- Build a lightweight pattern store: domain → effective keyword strategies. Feed relevant patterns into the research agent context for known domains (e.g. HEMA event sites, music tour databases, local news sources).
+
+**3. Memory extraction quality feedback**
+- When the user corrects the LLM on a fact it should have known (e.g. "no, I already told you I quit that job"), detect the correction and flag the relevant memory as low-confidence or stale.
+- Periodically surface a summary of extraction failures to the user: memories that were never retrieved, memories that were corrected, patterns in what is consistently missed.
+
+**4. Pipeline timing and cost awareness**
+- Log wall-clock time and LLM call count per briefing phase and per research agent run.
+- After a slow briefing, surface a short diagnostic: which phase took the most time, how many chunks were processed, whether any agents exhausted iterations.
+- Use this data to propose config changes (e.g. lower `maxChunks`, increase `maxIterations` for specific task types).
+
+### Open questions
+- How much autonomy should the system have? Proposals-only (safe) vs. auto-applying low-risk changes (e.g. config tweaks) vs. code edits.
+- Self-modification of prompts risks drift — a reflection mechanism should compare proposed prompts to originals and flag large deviations.
+- The reflection LLM call should itself be subject to the same general-prompt rule: it reasons about classes of failure, not the specific task that happened to fail.
 
 ---
 
