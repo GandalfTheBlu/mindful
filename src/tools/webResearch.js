@@ -67,7 +67,14 @@ export async function webResearch({ topic, goal }, onStatus = () => {}) {
     } else if (fetchMatch) {
       const url = fetchMatch[1].trim();
       const kwRaw = fetchMatch[2]?.match(/KEYWORDS?:\s*(.+)/i)?.[1] ?? '';
-      const keywords = kwRaw.split(/,\s*/).map(k => k.trim()).filter(Boolean);
+      // Split by commas first (intended format), then split any multi-word token
+      // further by whitespace — the model often writes space-separated phrases
+      // instead of comma-separated words, producing one huge un-matchable keyword.
+      const keywords = kwRaw
+        .split(/,/)
+        .flatMap(k => k.trim().split(/\s+/))
+        .map(k => k.trim())
+        .filter(k => k.length >= 3);
       log('fetch', `${url}${keywords.length ? ` [${keywords.join(', ')}]` : ''}`);
       onStatus(`Web fetch: ${url}`);
       try {
