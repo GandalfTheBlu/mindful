@@ -276,16 +276,20 @@ form.addEventListener('submit', async e => {
 // --- Briefing ---
 btnBrief.addEventListener('click', async () => {
   if (!currentSession) return;
+  if (ttsEnabled) { const ctx = getAudioCtx(); if (ctx.state === 'suspended') ctx.resume(); }
   setUiEnabled(false);
   btnBrief.textContent = 'Loading…';
 
   const assistantDiv = document.createElement('div');
   assistantDiv.className = 'message assistant';
+  const briefStatusEl = document.createElement('div');
+  briefStatusEl.className = 'stream-status';
   const bubble = document.createElement('div');
   bubble.className = 'message-bubble';
   const cursor = document.createElement('span');
   cursor.className = 'cursor';
   bubble.appendChild(cursor);
+  assistantDiv.appendChild(briefStatusEl);
   assistantDiv.appendChild(bubble);
   messages.appendChild(assistantDiv);
   scrollToBottom();
@@ -304,6 +308,24 @@ btnBrief.addEventListener('click', async () => {
   const decoder = new TextDecoder();
   let buffer = '';
   let streamedText = '';
+  // Track latest status per task prefix so parallel tasks don't overwrite each other
+  const briefStatuses = new Map(); // prefix → { label, done }
+
+  function updateBriefStatus(label) {
+    const sep = label.indexOf(': ');
+    const prefix = sep > -1 ? label.slice(0, sep) : label;
+    const isDone = sep > -1 && label.slice(sep + 2) === '✓';
+    const current = briefStatuses.get(prefix);
+    briefStatuses.set(prefix, { label: isDone ? prefix : label, done: isDone || current?.done });
+    briefStatusEl.innerHTML = [...briefStatuses.values()]
+      .map(({ label: l, done }) =>
+        `<div style="opacity:${done ? '0.4' : '1'}">${done ? '✓ ' : ''}${l}</div>`
+      ).join('');
+  }
+
+  if (activeTTS) { activeTTS.stop(); activeTTS = null; }
+  const briefTTS = ttsEnabled ? new StreamingTTS(bubble) : null;
+  if (briefTTS) activeTTS = briefTTS;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -314,23 +336,29 @@ btnBrief.addEventListener('click', async () => {
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue;
       const event = JSON.parse(line.slice(6));
-      if (event.type === 'chunk') {
+      if (event.type === 'status') {
+        updateBriefStatus(event.label);
+      } else if (event.type === 'chunk') {
+        briefStatusEl.remove();
         streamedText += event.content;
         bubble.innerHTML = renderBold(streamedText);
         bubble.appendChild(cursor);
+        if (briefTTS) briefTTS.feedChunk(event.content);
         scrollToBottom();
       } else if (event.type === 'done') {
         cursor.remove();
+        if (briefTTS) briefTTS.flush();
         if (event.generated) {
           currentSession = await api('GET', `/api/sessions/${currentSession.id}`);
-          if (streamedText) speakText(streamedText, assistantDiv);
         } else {
+          if (briefTTS) briefTTS.stop();
           assistantDiv.remove();
         }
         setUiEnabled(true);
         btnBrief.textContent = 'Briefing';
       } else if (event.type === 'error') {
         cursor.remove();
+        if (briefTTS) briefTTS.stop();
         bubble.textContent = `Error: ${event.message}`;
         setUiEnabled(true);
         btnBrief.textContent = 'Briefing';

@@ -259,7 +259,11 @@ app.post('/api/sessions/:id/brief', async (req, res) => {
 
   busy = true;
   try {
-    const content = await runBriefing(session, chunk => send({ type: 'chunk', content: chunk }));
+    const content = await runBriefing(
+      session,
+      chunk => send({ type: 'chunk', content: chunk }),
+      label => send({ type: 'status', label })
+    );
     if (content) {
       session.messages.push({ role: 'assistant', content });
       saveSession(session);

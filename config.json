@@ -56,9 +56,11 @@
   },
   "tools": {
     "webSearch": { "maxResults": 5, "jinaApiKeyFile": "C:\\jina\\apikey.txt" },
-    "webFetch": { "maxChars": 12000 },
+    "webFetch": { "maxChars": 25000, "maxChunks": 8 },
     "readFile": { "chunkSize": 3000, "overlapSize": 200 },
     "fileSystem": { "allowedRoot": "C:\\mind\\workspace" },
-    "weather": { "lat": 58.41, "lon": 15.62 }
+    "weather": { "lat": 58.41, "lon": 15.62 },
+    "briefing": { "city": "Linköping", "country": "Sweden", "region": "Europe" },
+    "webResearch": { "maxIterations": 6 }
   }
 }
