@@ -139,6 +139,7 @@ export async function searchMemories(userId, text, topK, type = null) {
     ? results.filter(r => (r.item.metadata.type ?? 'semantic') === type)
     : results;
   return filtered.slice(0, topK).map(r => ({
+    id: r.item.id,
     text: r.item.metadata.text,
     score: r.score,
     type: r.item.metadata.type ?? 'semantic',
@@ -147,6 +148,17 @@ export async function searchMemories(userId, text, topK, type = null) {
     lastAccessed: r.item.metadata.lastAccessed ?? null,
     accessCount: r.item.metadata.accessCount ?? 0
   }));
+}
+
+export async function updateMemoryText(userId, id, newText) {
+  const index = await getIndex(userId);
+  const items = await index.listItems();
+  const item = items.find(i => i.id === id);
+  if (!item) throw new Error(`Memory not found: ${id}`);
+  const vector = await embed(newText);
+  await index.beginUpdate();
+  await index.upsertItem({ id, vector, metadata: { ...item.metadata, text: newText } });
+  await index.endUpdate();
 }
 
 export async function wipeMemories(userId) {

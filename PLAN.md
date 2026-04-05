@@ -313,7 +313,7 @@ Config addition: `memory.episodicDecay` (default 0.05).
 
 ---
 
-## Phase 14: Memory & User Model Editing
+## ~~Phase 14: Memory & User Model Editing~~ ✓
 
 **Goal:** Let the user correct, delete, or edit individual memories and the user model portrait directly from the UI — so bad extractions don't persist until consolidation resolves them.
 

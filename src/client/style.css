@@ -489,6 +489,68 @@ button:disabled { opacity: 0.35; cursor: default; }
   white-space: pre-wrap;
 }
 
+.user-model-edit-area {
+  width: 100%;
+  min-height: 300px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.7;
+  font-family: inherit;
+  border-radius: 4px;
+  padding: 8px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.user-model-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.memory-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.memory-actions button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  line-height: 1.4;
+}
+
+.memory-actions button:hover { color: var(--text); border-color: var(--text-dim); }
+.memory-actions button.danger:hover { color: #e05a5a; border-color: #e05a5a; }
+
+.memory-edit-area {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: inherit;
+  border-radius: 4px;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.memory-edit-confirm {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 .search-controls select {
   background: var(--bg);
   border: 1px solid var(--border);

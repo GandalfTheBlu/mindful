@@ -515,16 +515,60 @@ function clearChat() {
 // --- User model ---
 const userModelModal = document.getElementById('user-model-modal');
 const userModelContent = document.getElementById('user-model-content');
+let userModelText = null; // last loaded model text
 
 document.getElementById('btn-user-model').addEventListener('click', async () => {
-  userModelContent.textContent = 'Loading…';
+  userModelContent.innerHTML = 'Loading…';
   userModelModal.hidden = false;
   const { model } = await api('GET', `/api/usermodel?userId=${encodeURIComponent(currentUserId)}`);
+  userModelText = model;
   userModelContent.textContent = model ?? 'No user model has been synthesized yet.';
 });
 
 document.getElementById('btn-close-user-model').addEventListener('click', () => {
   userModelModal.hidden = true;
+});
+
+document.getElementById('btn-edit-user-model').addEventListener('click', () => {
+  if (!userModelText) return;
+
+  const ta = document.createElement('textarea');
+  ta.className = 'user-model-edit-area';
+  ta.value = userModelText;
+
+  const btnBar = document.createElement('div');
+  btnBar.className = 'user-model-edit-actions';
+
+  const btnSave = document.createElement('button');
+  btnSave.textContent = 'Save';
+  const btnCancel = document.createElement('button');
+  btnCancel.textContent = 'Cancel';
+
+  btnSave.addEventListener('click', async () => {
+    const newText = ta.value.trim();
+    if (!newText) return;
+    btnSave.disabled = true;
+    await api('PUT', `/api/usermodel?userId=${encodeURIComponent(currentUserId)}`, { model: newText });
+    userModelText = newText;
+    exitEdit(newText);
+  });
+
+  btnCancel.addEventListener('click', () => exitEdit(userModelText));
+
+  function exitEdit(displayText) {
+    ta.remove();
+    btnBar.remove();
+    userModelContent.textContent = displayText ?? '';
+    document.getElementById('btn-edit-user-model').disabled = false;
+  }
+
+  btnBar.appendChild(btnSave);
+  btnBar.appendChild(btnCancel);
+  userModelContent.textContent = '';
+  userModelContent.appendChild(ta);
+  userModelContent.appendChild(btnBar);
+  document.getElementById('btn-edit-user-model').disabled = true;
+  ta.focus();
 });
 
 userModelModal.addEventListener('click', e => {
@@ -632,8 +676,70 @@ async function runMemorySearch() {
 
     body.appendChild(text);
     body.appendChild(meta);
+
+    // --- Edit / Delete actions ---
+    const actions = document.createElement('div');
+    actions.className = 'memory-actions';
+
+    const btnEdit = document.createElement('button');
+    btnEdit.textContent = '✎';
+    btnEdit.title = 'Edit';
+    btnEdit.addEventListener('click', () => {
+      // Replace text div with textarea
+      const ta = document.createElement('textarea');
+      ta.className = 'memory-edit-area';
+      ta.value = text.textContent;
+      ta.rows = Math.max(2, text.textContent.split('\n').length);
+
+      const confirm = document.createElement('div');
+      confirm.className = 'memory-edit-confirm';
+
+      const btnSave = document.createElement('button');
+      btnSave.textContent = 'Save';
+      const btnCancel = document.createElement('button');
+      btnCancel.textContent = 'Cancel';
+
+      btnSave.addEventListener('click', async () => {
+        const newText = ta.value.trim();
+        if (!newText || newText === r.text) { cancel(); return; }
+        btnSave.disabled = true;
+        await api('PUT', `/api/memories/${r.id}?userId=${encodeURIComponent(currentUserId)}`, { text: newText });
+        r.text = newText;
+        text.textContent = newText;
+        cancel();
+      });
+
+      btnCancel.addEventListener('click', cancel);
+
+      function cancel() {
+        body.replaceChild(text, ta);
+        confirm.remove();
+        btnEdit.disabled = false;
+      }
+
+      confirm.appendChild(btnSave);
+      confirm.appendChild(btnCancel);
+      body.replaceChild(ta, text);
+      body.appendChild(confirm);
+      btnEdit.disabled = true;
+      ta.focus();
+    });
+
+    const btnDelete = document.createElement('button');
+    btnDelete.textContent = '✕';
+    btnDelete.title = 'Delete';
+    btnDelete.className = 'danger';
+    btnDelete.addEventListener('click', async () => {
+      await api('DELETE', `/api/memories/${r.id}?userId=${encodeURIComponent(currentUserId)}`);
+      row.remove();
+    });
+
+    actions.appendChild(btnEdit);
+    actions.appendChild(btnDelete);
+
     row.appendChild(score);
     row.appendChild(body);
+    row.appendChild(actions);
     memorySearchResults.appendChild(row);
   }
 }

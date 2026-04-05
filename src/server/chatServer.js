@@ -11,8 +11,8 @@ console.log = (...args) => {
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { init as initVectra, wipeMemories, searchMemories } from '../core/vectraStore.js';
-import { wipeUserModel, getUserModel } from '../core/userModel.js';
+import { init as initVectra, wipeMemories, searchMemories, deleteItems, updateMemoryText } from '../core/vectraStore.js';
+import { wipeUserModel, getUserModel, setUserModel } from '../core/userModel.js';
 import { getTokenStatus, startReauthFlow } from '../core/googleAuth.js';
 import { getTokenStatus as getSpotifyTokenStatus, startReauthFlow as startSpotifyReauthFlow } from '../core/spotifyAuth.js';
 import { synthesize, isTTSConfigured } from '../tts.js';
@@ -114,6 +114,31 @@ app.get('/api/usermodel', (req, res) => {
   if (!userId) return res.status(400).json({ error: 'userId required' });
   const model = getUserModel(userId);
   res.json({ model: model ?? null });
+});
+
+app.put('/api/usermodel', (req, res) => {
+  const userId = req.query.userId;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  const { model } = req.body;
+  if (typeof model !== 'string') return res.status(400).json({ error: 'model text required' });
+  setUserModel(userId, model);
+  res.json({ ok: true });
+});
+
+app.delete('/api/memories/:id', async (req, res) => {
+  const userId = req.query.userId;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  await deleteItems(userId, [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.put('/api/memories/:id', async (req, res) => {
+  const userId = req.query.userId;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  const { text } = req.body;
+  if (!text?.trim()) return res.status(400).json({ error: 'text required' });
+  await updateMemoryText(userId, req.params.id, text.trim());
+  res.json({ ok: true });
 });
 
 app.post('/api/memories/search', async (req, res) => {
