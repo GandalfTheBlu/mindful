@@ -24,6 +24,14 @@ export function getUserModel(userId) {
   return fs.readFileSync(p, 'utf8').trim() || null;
 }
 
+// Extracts just the ## Summary section from the structured model.
+export function getUserModelSummary(userId) {
+  const full = getUserModel(userId);
+  if (!full) return null;
+  const match = full.match(/##\s*Summary\s*\n([\s\S]*?)(?=\n##|\s*$)/i);
+  return match ? match[1].trim() : null;
+}
+
 export function setUserModel(userId, text) {
   fs.writeFileSync(modelPath(userId), text.trim(), 'utf8');
 }
@@ -51,9 +59,27 @@ function saveLastSynthesisCount(userId, count) {
 }
 
 const SYNTHESIS_SYSTEM = `/no_think
-You are maintaining a living portrait of a user based on their stored memories. Write a concise prose description (150–250 words) capturing who this person is: their background, current situation, what they are working toward, and notable patterns in how they think or what they care about. Be specific — use concrete details from the memories rather than vague generalities. Write in third person. Do not produce a list of facts; synthesize them into a coherent portrait.
+You are maintaining a structured profile of a user based on their stored memories. Produce a profile with exactly these sections. Each section (except Summary) contains short bullet points — 2 to 5 bullets, specific and concrete. Write in third person, present tense. Omit a section entirely if there is nothing relevant to put in it.
 
-If an existing portrait is provided, update it to reflect the full set of memories while preserving accurate existing detail.`;
+## Summary
+2–3 sentences capturing who this person is, what they are doing, and what they are working toward. This is the only prose section.
+
+## Background
+Stable identity facts: location, profession, education, life context.
+
+## Current Projects
+What they are actively building, creating, or working on right now.
+
+## Goals
+Forward-looking intentions and aspirations.
+
+## Interests
+Domains, hobbies, communities, and activities they care about.
+
+## Patterns
+Recurring themes, habits, or tendencies observed across their memories.
+
+If an existing profile is provided, update it with new information while preserving accurate existing content. Remove outdated or superseded details.`;
 
 async function synthesize(userId, currentCount) {
   const items = await listAllItems(userId);
@@ -82,7 +108,7 @@ async function synthesize(userId, currentCount) {
       { role: 'system', content: SYNTHESIS_SYSTEM },
       { role: 'user', content: contextContent }
     ],
-    { max_tokens: 400 }
+    { max_tokens: 600 }
   );
 
   const text = result.trim();

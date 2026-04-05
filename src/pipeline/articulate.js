@@ -104,7 +104,7 @@ function formatToolStatus(name, argsStr) {
   } catch { return `Tool: ${name}`; }
 }
 
-export async function articulate(session, onChunk, observations = [], procedural = [], userModel = null, onStatus = () => {}) {
+export async function articulate(session, onChunk, observations = [], procedural = [], userModelSummary = null, userModelFull = null, injectedCount = 0, onStatus = () => {}) {
   // Condense chat history if approaching horizon
   const window = new ContextWindow(session.messages, {
     maxChars: CHAT_MAX_CHARS,
@@ -119,8 +119,13 @@ export async function articulate(session, onChunk, observations = [], procedural
   }));
 
   let systemContent = SYSTEM;
-  if (userModel) {
-    systemContent += `\n\n[About this user]\n${userModel}`;
+  // Always inject the summary (grounding). Only inject the full profile when
+  // retrieval found no specific memories — otherwise it adds noise.
+  if (userModelSummary) {
+    systemContent += `\n\n[About this user]\n${userModelSummary}`;
+    if (injectedCount === 0 && userModelFull) {
+      systemContent += `\n\n[Full user profile]\n${userModelFull}`;
+    }
   }
   if (procedural.length > 0) {
     systemContent += `\n\n[User preferences for your responses]\n${procedural.join('\n')}`;

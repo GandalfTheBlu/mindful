@@ -31,7 +31,8 @@
     "maxMemoriesForContradictionCheck": 40
   },
   "patternRecognition": {
-    "recurrenceThreshold": 4
+    "recurrenceThreshold": 4,
+    "recurrenceMinScore": 0.6
   },
   "confidence": {
     "boostOnAccess": 0.05,

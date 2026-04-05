@@ -4,7 +4,7 @@ import { articulate } from './articulate.js';
 import { extract } from './extract.js';
 import { runConsolidation } from '../core/consolidation.js';
 import { listAllItems } from '../core/vectraStore.js';
-import { getUserModel, maybeSynthesizeUserModel } from '../core/userModel.js';
+import { getUserModel, getUserModelSummary, maybeSynthesizeUserModel } from '../core/userModel.js';
 
 function log(label, data) {
   console.log(`[${new Date().toISOString()}] [pipeline] ${label}`, data ?? '');
@@ -46,9 +46,10 @@ export class CognitivePipeline {
 
     // --- Phase 2: Articulate ---
     log('phase', 'articulate');
-    const userModel = getUserModel(userId);
-    if (userModel) log('user-model', `${userModel.length} chars`);
-    const assistantContent = await articulate(session, onChunk, observations, procedural, userModel, onStatus);
+    const userModelFull = getUserModel(userId);
+    const userModelSummary = getUserModelSummary(userId);
+    if (userModelFull) log('user-model', `${userModelFull.length} chars, injected=${injected.length > 0 ? 'summary-only' : 'full'}`);
+    const assistantContent = await articulate(session, onChunk, observations, procedural, userModelSummary, userModelFull, injected.length, onStatus);
     session.messages.push({ role: 'assistant', content: assistantContent });
 
     // Signal to the caller that streaming is done — TTS can flush, UI can re-enable

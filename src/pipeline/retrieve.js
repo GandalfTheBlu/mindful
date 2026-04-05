@@ -55,7 +55,7 @@ export async function retrieve(session, userContent) {
       const response = await complete(
         [
           { role: 'system', content: FILTER_SYSTEM },
-          { role: 'user', content: `Context:\n${userMessagesText}\n\nMemories:\n${numbered}` }
+          { role: 'user', content: `User message: ${userContent}\n\nMemories:\n${numbered}` }
         ],
         { max_tokens: config.memory.maxTokens }
       );

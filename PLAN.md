@@ -484,4 +484,16 @@ After the existing briefing data is gathered, an additional pipeline step runs:
 
 ---
 
+## ~~Phase 19: Memory Injection Quality & User Model Structure~~ ✓
+
+**Goal:** Reduce noise in what gets injected into the LLM context each turn, and prevent the user model from becoming an undifferentiated prose blob.
+
+**Implemented:**
+
+- **Structured user model** — synthesis now produces `## Summary / Background / Current Projects / Goals / Interests / Patterns` sections with bullet points instead of free-form prose. Easier for the LLM to parse, natural deduplication, enables selective injection.
+- **`getUserModelSummary()`** — extracts only the `## Summary` section (2–3 sentences) from the structured model.
+- **Selective user model injection** — Summary is always injected (grounding). Full profile only injected when retrieval found zero memories; when memories were retrieved, the full model is skipped to avoid off-topic noise overwhelming the model.
+- **Recurrence score gate** — `recognize.js` now uses `searchMemories` (returns scores) for the broad candidate fetch. Only memories scoring above `patternRecognition.recurrenceMinScore` (default 0.6) count toward the recurrence threshold. Prevents a sparse store dominated by one topic from firing recurrence observations on every unrelated turn.
+- **Filter context = current message** — the post-retrieval filter LLM call now receives only the current user message as context, not all prior user messages. The filter question is "relevant to *this* message?" not "relevant to the session in general?"
+
 ## Known Issues / TODOs

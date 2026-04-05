@@ -1,5 +1,5 @@
 import { complete } from '../llm.js';
-import { queryMemories, listByTypeWithMeta } from '../core/vectraStore.js';
+import { searchMemories, listByTypeWithMeta } from '../core/vectraStore.js';
 import config from '../config.js';
 
 const GOAL_STALE_DAYS = 7;
@@ -25,13 +25,17 @@ const EMOTIONAL_KEYWORDS = [
 
 export async function recognize(userId, injectedTexts, expandedQuery) {
   const recurrenceThreshold = config.patternRecognition?.recurrenceThreshold ?? 4;
+  const recurrenceMinScore = config.patternRecognition?.recurrenceMinScore ?? 0.6;
   const observations = [];
 
-  // Broader query to detect patterns across more memories than what was injected
-  const broadCandidates = await queryMemories(userId, expandedQuery, 12);
+  // Broader query to detect patterns — use searchMemories so we have scores.
+  // Only count memories above the score threshold: low-scoring hits just mean
+  // the store is sparse, not that the topic is genuinely recurring.
+  const broadRaw = await searchMemories(userId, expandedQuery, 12);
+  const broadCandidates = broadRaw.filter(m => m.score >= recurrenceMinScore);
 
   // --- Recurrence detection ---
-  // If many memories cluster around the same topic, the user keeps returning to it
+  // If many relevant memories cluster around the same topic, the user keeps returning to it
   if (broadCandidates.length >= recurrenceThreshold) {
     const texts = broadCandidates.map((m, i) => `${i + 1}. ${m.text}`).join('\n');
     const result = await complete(
@@ -49,7 +53,7 @@ export async function recognize(userId, injectedTexts, expandedQuery) {
   }
 
   // --- Emotional tone patterns ---
-  // Only run if any emotional keywords appear in the broad candidates
+  // Only run if any emotional keywords appear in the score-filtered broad candidates
   if (broadCandidates.length > 0) {
     const combined = broadCandidates.map(m => m.text).join(' ').toLowerCase();
     const hasEmotional = EMOTIONAL_KEYWORDS.some(k => combined.includes(k));
